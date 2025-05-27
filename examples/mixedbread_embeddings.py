@@ -23,7 +23,7 @@ for i, embedding in enumerate(doc_embeddings):
     print(f"Document {i+1} embedding dimension: {len(embedding)}")
 
 documents = [
-    Document(content=text, metadata={"category": "food", "origin": "German"})
+    Document(page_content=text, metadata={"category": "food", "origin": "German"})
     for text in texts
 ]
 

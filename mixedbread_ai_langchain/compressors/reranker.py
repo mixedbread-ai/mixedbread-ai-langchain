@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.callbacks import Callbacks
 from mixedbread.types import RerankResponse
+from pydantic import Field, PrivateAttr
 from ..common.client import MixedbreadClient
 
 
@@ -12,23 +13,24 @@ class MixedbreadReranker(BaseDocumentCompressor):
 
     This compressor reranks a list of documents based on their relevance to a query
     using Mixedbread AI's reranking models.
-
-    Example:
-        .. code-block:: python
-
-            from mixedbread_ai_langchain import MixedbreadReranker
-            from langchain_core.documents import Document
-
-            # Create reranker
-            reranker = MixedbreadReranker(
-                model="mixedbread-ai/mxbai-rerank-large-v1",
-                top_k=3
-            )
-
-            # Rerank documents
-            documents = [Document(page_content="...")]
-            reranked = reranker.compress_documents(documents, "query")
     """
+
+    model: str = Field(
+        default="mixedbread-ai/mxbai-rerank-large-v2",
+        description="The Mixedbread reranking model to use",
+    )
+    top_k: int = Field(
+        default=3, description="Number of top documents to return after reranking"
+    )
+    return_input: bool = Field(
+        default=True, description="Whether to return the input text in results"
+    )
+    rank_fields: List[str] = Field(
+        default_factory=list,
+        description="Specific metadata fields to include in ranking text",
+    )
+
+    _client: MixedbreadClient = PrivateAttr()
 
     def __init__(
         self,
@@ -55,14 +57,16 @@ class MixedbreadReranker(BaseDocumentCompressor):
             timeout: Request timeout in seconds
             max_retries: Maximum number of retries
         """
-        super().__init__(**kwargs)
+        # Initialize Pydantic fields
+        super().__init__(
+            model=model,
+            top_k=max(1, top_k),
+            return_input=return_input,
+            rank_fields=rank_fields or [],
+            **kwargs,
+        )
 
-        self.model = model
-        self.top_k = max(1, top_k)
-        self.return_input = return_input
-        self.rank_fields = rank_fields or []
-
-        # Initialize the client
+        # Initialize the private client
         self._client = MixedbreadClient(
             api_key=api_key,
             base_url=base_url,
@@ -77,10 +81,8 @@ class MixedbreadReranker(BaseDocumentCompressor):
         prepared_texts = []
 
         for doc in documents:
-            # Start with main content
             content = doc.page_content or ""
 
-            # Add specific metadata fields if specified
             if self.rank_fields:
                 meta_content = []
                 for field in self.rank_fields:
@@ -110,15 +112,13 @@ class MixedbreadReranker(BaseDocumentCompressor):
         reranked_docs = []
 
         for result in reranking_response.data:
-            # Get original document by index
             if result.index < len(documents):
                 original_doc = documents[result.index]
 
-                # Create new document with reranking metadata
                 reranked_metadata = original_doc.metadata.copy()
                 reranked_metadata.update(
                     {
-                        "rerank_score": result.relevance_score,
+                        "rerank_score": result.score,
                         "rerank_index": result.index,
                         "rerank_model": self.model,
                         "original_index": result.index,
