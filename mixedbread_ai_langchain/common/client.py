@@ -1,8 +1,8 @@
 import os
 from typing import Optional
 import httpx
-from mixedbread import Mixedbread as MixedbreadSDKClient
-from mixedbread import AsyncMixedbread as AsyncMixedbreadSDKClient
+from mixedbread import Mixedbread
+from mixedbread import AsyncMixedbread
 
 USER_AGENT_VERSION = "0.1.0"
 USER_AGENT = f"mixedbread-ai-langchain/{USER_AGENT_VERSION}"
@@ -23,7 +23,7 @@ class MixedbreadClient:
         _httpx_client: Optional[httpx.Client] = None,
         _async_httpx_client: Optional[httpx.AsyncClient] = None,
     ):
-        # Get API key from parameter or environment variable
+
         self.api_key = api_key or os.getenv("MXBAI_API_KEY")
         if not self.api_key:
             raise ValueError(
@@ -34,7 +34,7 @@ class MixedbreadClient:
         self.timeout = timeout
         self.max_retries = max_retries
 
-        self._client = MixedbreadSDKClient(
+        self._client = Mixedbread(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
@@ -43,7 +43,7 @@ class MixedbreadClient:
             default_headers={"User-Agent": USER_AGENT},
         )
 
-        self._async_client = AsyncMixedbreadSDKClient(
+        self._async_client = AsyncMixedbread(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
@@ -53,9 +53,9 @@ class MixedbreadClient:
         )
 
     @property
-    def client(self) -> MixedbreadSDKClient:
+    def client(self) -> Mixedbread:
         return self._client
 
     @property
-    def async_client(self) -> AsyncMixedbreadSDKClient:
+    def async_client(self) -> AsyncMixedbread:
         return self._async_client

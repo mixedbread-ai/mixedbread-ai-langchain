@@ -19,9 +19,13 @@ documents = [
     ),
 ]
 
-reranker = MixedbreadReranker(model="mixedbread-ai/mxbai-rerank-large-v1", top_k=3)
+# Initialize the reranker
+reranker = MixedbreadReranker(model="mixedbread-ai/mxbai-rerank-large-v2", top_k=3)
 
 query = "Tell me about German bread traditions"
+
+# Example 1: Sync reranking
+print("=== Sync reranking ===")
 reranked_docs = reranker.compress_documents(documents, query)
 
 print(f"Query: {query}")
@@ -29,4 +33,9 @@ print(f"Reranked top {len(reranked_docs)} documents:")
 
 for i, doc in enumerate(reranked_docs, 1):
     score = doc.metadata.get("rerank_score", 0)
-    print(f"{i}. Score: {score:.3f} - {doc.page_content}")
+    original_index = doc.metadata.get("original_index", "unknown")
+    print(
+        f"{i}. Score: {score:.3f} (original index: {original_index}) - {doc.page_content}"
+    )
+
+print("\n" + "=" * 50 + "\n")

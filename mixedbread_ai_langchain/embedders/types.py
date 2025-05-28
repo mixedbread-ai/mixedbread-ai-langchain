@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Any, Dict, List, Union
 
 
 class MixedbreadEmbeddingType(Enum):
@@ -26,8 +25,3 @@ class MixedbreadEmbeddingType(Enum):
             raise ValueError(
                 f"Unknown Mixedbread embedding type '{s}'. Supported types are: {[e.value for e in MixedbreadEmbeddingType]}"
             ) from e
-
-
-# Type aliases for common structures
-EmbeddingVector = Union[List[float], List[int], str]
-MetadataDict = Dict[str, Any]

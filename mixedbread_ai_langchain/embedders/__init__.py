@@ -1,9 +1,7 @@
 from .embeddings import MixedbreadEmbeddings
-from .types import MixedbreadEmbeddingType, EmbeddingVector, MetadataDict
+from .types import MixedbreadEmbeddingType
 
 __all__ = [
     "MixedbreadEmbeddings",
     "MixedbreadEmbeddingType",
-    "EmbeddingVector",
-    "MetadataDict",
 ]

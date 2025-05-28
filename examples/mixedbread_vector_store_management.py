@@ -8,7 +8,7 @@ store_id = manager.create_vector_store(
 
 print(f"Created vector store: {store_id}")
 
-file_paths = ["./data/paper1.pdf", "./data/paper2.pdf", "./data/notes.docx"]
+file_paths = ["./data/report.pdf"]
 file_ids = manager.upload_files(store_id, file_paths)
 
 print(f"Uploaded {len(file_ids)} files")

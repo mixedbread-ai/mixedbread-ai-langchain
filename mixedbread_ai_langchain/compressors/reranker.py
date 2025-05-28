@@ -1,7 +1,6 @@
 from typing import Any, List, Optional, Sequence
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
-from langchain_core.callbacks import Callbacks
 from mixedbread.types import RerankResponse
 from pydantic import Field, PrivateAttr
 from ..common.client import MixedbreadClient
@@ -25,10 +24,6 @@ class MixedbreadReranker(BaseDocumentCompressor):
     return_input: bool = Field(
         default=True, description="Whether to return the input text in results"
     )
-    rank_fields: List[str] = Field(
-        default_factory=list,
-        description="Specific metadata fields to include in ranking text",
-    )
 
     _client: MixedbreadClient = PrivateAttr()
 
@@ -38,35 +33,28 @@ class MixedbreadReranker(BaseDocumentCompressor):
         api_key: Optional[str] = None,
         top_k: int = 3,
         return_input: bool = True,
-        rank_fields: Optional[List[str]] = None,
         base_url: Optional[str] = None,
         timeout: Optional[float] = 60.0,
         max_retries: Optional[int] = 2,
-        **kwargs: Any,
     ):
         """
         Initialize the Mixedbread reranker.
 
         Args:
-            model: The Mixedbread reranking model to use
-            api_key: API key for Mixedbread AI (or set MXBAI_API_KEY env var)
-            top_k: Number of top documents to return after reranking
-            return_input: Whether to return the input text in results
-            rank_fields: Specific metadata fields to include in ranking text
-            base_url: Base URL for the API
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retries
+            model: The Mixedbread reranking model to use.
+            api_key: API key for Mixedbread AI (or set MXBAI_API_KEY env var).
+            top_k: Number of top documents to return after reranking.
+            return_input: Whether to return the input text in results.
+            base_url: Base URL for the API.
+            timeout: Request timeout in seconds.
+            max_retries: Maximum number of retries for failed requests.
         """
-        # Initialize Pydantic fields
         super().__init__(
             model=model,
             top_k=max(1, top_k),
             return_input=return_input,
-            rank_fields=rank_fields or [],
-            **kwargs,
         )
 
-        # Initialize the private client
         self._client = MixedbreadClient(
             api_key=api_key,
             base_url=base_url,
@@ -77,35 +65,30 @@ class MixedbreadReranker(BaseDocumentCompressor):
     def _prepare_documents_for_reranking(
         self, documents: Sequence[Document]
     ) -> List[str]:
-        """Prepare documents for reranking by extracting text content."""
-        prepared_texts = []
+        """
+        Prepare documents for reranking by extracting content.
 
-        for doc in documents:
-            content = doc.page_content or ""
+        Args:
+            documents: Sequence of documents to prepare.
 
-            if self.rank_fields:
-                meta_content = []
-                for field in self.rank_fields:
-                    field_value = doc.metadata.get(field)
-                    if field_value is not None:
-                        meta_content.append(str(field_value))
-
-                if meta_content:
-                    # Combine metadata with content
-                    combined_content = " ".join(meta_content)
-                    if content:
-                        content = f"{combined_content} {content}"
-                    else:
-                        content = combined_content
-
-            prepared_texts.append(content)
-
-        return prepared_texts
+        Returns:
+            List of text strings ready for reranking.
+        """
+        return [doc.page_content or "" for doc in documents]
 
     def _apply_reranking_results(
         self, documents: Sequence[Document], reranking_response: RerankResponse
     ) -> List[Document]:
-        """Apply reranking results to documents and return reranked list."""
+        """
+        Apply reranking results to documents and return reranked list.
+
+        Args:
+            documents: Original sequence of documents.
+            reranking_response: Response from the reranking API.
+
+        Returns:
+            List of reranked documents with updated metadata.
+        """
         if not reranking_response.data:
             return list(documents)
 
@@ -136,18 +119,16 @@ class MixedbreadReranker(BaseDocumentCompressor):
         self,
         documents: Sequence[Document],
         query: str,
-        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         """
-        Rerank documents using Mixedbread AI.
+        Compress documents by reranking them based on relevance to the query.
 
         Args:
-            documents: A sequence of documents to compress/rerank
-            query: The query to use for reranking the documents
-            callbacks: Optional callbacks to run during compression
+            documents: Sequence of documents to rerank.
+            query: The query to rank documents against.
 
         Returns:
-            A sequence of reranked documents, limited to top_k
+            Sequence of reranked documents, limited to top_k results.
         """
         if not documents:
             return []
@@ -156,10 +137,8 @@ class MixedbreadReranker(BaseDocumentCompressor):
             return documents[: self.top_k]
 
         try:
-            # Prepare document texts for reranking
             doc_texts = self._prepare_documents_for_reranking(documents)
 
-            # Call the reranking API
             response: RerankResponse = self._client.client.rerank(
                 model=self.model,
                 query=query,
@@ -168,31 +147,27 @@ class MixedbreadReranker(BaseDocumentCompressor):
                 return_input=self.return_input,
             )
 
-            # Apply reranking results
             reranked_docs = self._apply_reranking_results(documents, response)
 
             return reranked_docs
 
         except Exception as e:
-            # Fallback: return original documents (limited to top_k) if reranking fails
             return documents[: self.top_k]
 
     async def acompress_documents(
         self,
         documents: Sequence[Document],
         query: str,
-        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         """
         Async version of compress_documents.
 
         Args:
-            documents: A sequence of documents to compress/rerank
-            query: The query to use for reranking the documents
-            callbacks: Optional callbacks to run during compression
+            documents: Sequence of documents to rerank.
+            query: The query to rank documents against.
 
         Returns:
-            A sequence of reranked documents, limited to top_k
+            Sequence of reranked documents, limited to top_k results.
         """
         if not documents:
             return []
@@ -201,10 +176,8 @@ class MixedbreadReranker(BaseDocumentCompressor):
             return documents[: self.top_k]
 
         try:
-            # Prepare document texts for reranking
             doc_texts = self._prepare_documents_for_reranking(documents)
 
-            # Call the reranking API asynchronously
             response: RerankResponse = await self._client.async_client.rerank(
                 model=self.model,
                 query=query,
@@ -213,20 +186,9 @@ class MixedbreadReranker(BaseDocumentCompressor):
                 return_input=self.return_input,
             )
 
-            # Apply reranking results
             reranked_docs = self._apply_reranking_results(documents, response)
 
             return reranked_docs
 
         except Exception as e:
-            # Fallback: return original documents (limited to top_k) if reranking fails
             return documents[: self.top_k]
-
-    def update_config(self, **kwargs: Any) -> None:
-        """Update configuration parameters."""
-        if "top_k" in kwargs:
-            self.top_k = max(1, kwargs["top_k"])
-        if "return_input" in kwargs:
-            self.return_input = kwargs["return_input"]
-        if "rank_fields" in kwargs:
-            self.rank_fields = kwargs["rank_fields"] or []
