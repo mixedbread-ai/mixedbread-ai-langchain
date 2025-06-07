@@ -1,9 +1,11 @@
 import pytest
+import asyncio
 from unittest.mock import Mock, patch
 from langchain_core.documents import Document
 from mixedbread_ai_langchain import (
     MixedbreadVectorStoreRetriever,
     MixedbreadVectorStoreFileRetriever,
+    MixedbreadVectorStoreManager,
 )
 from .test_config import TestConfig
 
@@ -72,6 +74,13 @@ class TestMixedbreadVectorStoreRetriever:
 
         documents = retriever._get_relevant_documents("test query")
         assert documents == []
+        
+        # Verify the search was called with correct parameters
+        mock_client.client.vector_stores.search.assert_called_once()
+        call_args = mock_client.client.vector_stores.search.call_args[1]
+        assert call_args["query"] == "test query"
+        assert call_args["vector_store_ids"] == ["test-store"]
+        assert call_args["top_k"] == 10
 
     @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.MixedbreadClient")
     def test_get_relevant_documents_with_results(self, mock_client_class):
@@ -107,6 +116,59 @@ class TestMixedbreadVectorStoreRetriever:
         assert documents[0].metadata["file_id"] == "file1"
         assert documents[0].metadata["filename"] == "test.pdf"
         assert documents[0].metadata["relevance_score"] == 0.95
+        
+        # Verify the search was called with correct parameters
+        mock_client.client.vector_stores.search.assert_called_once()
+        call_args = mock_client.client.vector_stores.search.call_args[1]
+        assert call_args["query"] == "test query"
+        assert call_args["vector_store_ids"] == ["test-store"]
+        assert call_args["top_k"] == 10
+        assert call_args["return_metadata"] is True
+        
+    @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.AsyncMixedbread")
+    def test_search_async_convenience_method(self, mock_async_client_class):
+        """
+        Test the search_async convenience method.
+        """
+        # Mock the async client
+        mock_async_client = Mock()
+        mock_async_client_class.return_value = mock_async_client
+        
+        retriever = MixedbreadVectorStoreRetriever(
+            vector_store_ids=["test-store"],
+            api_key="fake-api-key"
+        )
+        
+        # Test that the convenience method returns the right awaitable
+        result = retriever.search_async("test query")
+        
+        # Verify the async client search method was prepared with correct parameters
+        mock_async_client.vector_stores.search.assert_called_once_with(
+            query="test query",
+            vector_store_ids=["test-store"],
+            top_k=10,
+            return_metadata=True
+        )
+        
+    @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.AsyncMixedbread")
+    def test_direct_async_client_access(self, mock_async_client_class):
+        """
+        Test direct access to the async client.
+        """
+        # Mock the async client
+        mock_async_client = Mock()
+        mock_async_client_class.return_value = mock_async_client
+        
+        retriever = MixedbreadVectorStoreRetriever(
+            vector_store_ids=["test-store"],
+            api_key="fake-api-key"
+        )
+        
+        # Test direct client access
+        assert retriever.aclient == mock_async_client
+        
+        # Users can call retriever.aclient.vector_stores.search() directly
+        # This gives them full access to the SDK without wrapper limitations
 
     @pytest.mark.skipif(
         not TestConfig.has_api_key(),
@@ -188,6 +250,13 @@ class TestMixedbreadVectorStoreFileRetriever:
 
         documents = retriever._get_relevant_documents("test query")
         assert documents == []
+        
+        # Verify the search was called with correct parameters
+        mock_client.client.vector_stores.files.search.assert_called_once()
+        call_args = mock_client.client.vector_stores.files.search.call_args[1]
+        assert call_args["query"] == "test query"
+        assert call_args["vector_store_ids"] == ["test-store"]
+        assert call_args["top_k"] == 10
 
     @patch(
         "mixedbread_ai_langchain.retrievers.vector_store_file_retriever.MixedbreadClient"
@@ -236,6 +305,64 @@ class TestMixedbreadVectorStoreFileRetriever:
         assert documents[0].metadata["file_id"] == "file1"
         assert documents[0].metadata["filename"] == "test.pdf"
         assert documents[0].metadata["relevance_score"] == 0.95
+        
+        # Verify the search was called with correct parameters
+        mock_client.client.vector_stores.files.search.assert_called_once()
+        call_args = mock_client.client.vector_stores.files.search.call_args[1]
+        assert call_args["query"] == "test query"
+        assert call_args["vector_store_ids"] == ["test-store"]
+        assert call_args["top_k"] == 10
+        assert call_args["return_metadata"] is True
+        assert call_args["return_chunks"] is False
+        
+    @patch("mixedbread_ai_langchain.retrievers.vector_store_file_retriever.AsyncMixedbread")
+    def test_file_search_async_convenience_method(self, mock_async_client_class):
+        """
+        Test the search_async convenience method for file retriever.
+        """
+        # Mock the async client
+        mock_async_client = Mock()
+        mock_async_client_class.return_value = mock_async_client
+        
+        retriever = MixedbreadVectorStoreFileRetriever(
+            vector_store_ids=["test-store"],
+            api_key="fake-api-key",
+            include_chunks=True,
+            chunk_limit=3
+        )
+        
+        # Test that the convenience method returns the right awaitable
+        result = retriever.search_async("test query")
+        
+        # Verify the async client search method was prepared with correct parameters
+        mock_async_client.vector_stores.files.search.assert_called_once_with(
+            query="test query",
+            vector_store_ids=["test-store"],
+            top_k=10,
+            return_metadata=True,
+            return_chunks=True,
+            chunk_limit=3
+        )
+        
+    @patch("mixedbread_ai_langchain.retrievers.vector_store_file_retriever.AsyncMixedbread")
+    def test_file_direct_async_client_access(self, mock_async_client_class):
+        """
+        Test direct access to the async client for file retriever.
+        """
+        # Mock the async client
+        mock_async_client = Mock()
+        mock_async_client_class.return_value = mock_async_client
+        
+        retriever = MixedbreadVectorStoreFileRetriever(
+            vector_store_ids=["test-store"],
+            api_key="fake-api-key"
+        )
+        
+        # Test direct client access
+        assert retriever.aclient == mock_async_client
+        
+        # Users can call retriever.aclient.vector_stores.files.search() directly
+        # This gives them full access to the SDK without wrapper limitations
 
     @pytest.mark.skipif(
         not TestConfig.has_api_key(),

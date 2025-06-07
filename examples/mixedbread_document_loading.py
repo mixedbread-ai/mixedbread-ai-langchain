@@ -1,7 +1,9 @@
 from mixedbread_ai_langchain import MixedbreadDocumentLoader
 
 loader = MixedbreadDocumentLoader(
-    file_paths=["./data/report.pdf"], chunking_strategy="page", return_format="markdown"
+    file_paths=["./data/acme_invoice.pdf"],
+    chunking_strategy="page",
+    return_format="markdown",
 )
 
 documents = loader.load()

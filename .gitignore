@@ -38,7 +38,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Unit test / coverage reports  
 htmlcov/
 .tox/
 .nox/
@@ -181,6 +181,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+CLAUDE.md
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

@@ -11,7 +11,6 @@ def check_api_key():
         print("Please set your API key:")
         print("export MXBAI_API_KEY='your-api-key-here'")
         return False
-    print(f"API key found: {api_key[:10]}...")
     return True
 
 
