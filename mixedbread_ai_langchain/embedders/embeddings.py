@@ -1,8 +1,7 @@
 from typing import List, Optional, Union, Dict, Any
 
 from langchain_core.embeddings import Embeddings
-from langchain_core.utils import Secret
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from mixedbread.types import EmbeddingCreateResponse
 from .types import MixedbreadEmbeddingType, EmbeddingMetadata
@@ -14,43 +13,41 @@ from ..common.logging import get_logger
 logger = get_logger(__name__)
 
 
-class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin, ErrorHandlingMixin):
+class MixedbreadEmbeddings(
+    Embeddings, BaseModel, SerializationMixin, AsyncMixin, ErrorHandlingMixin
+):
     """
     Mixedbread AI embeddings integration for LangChain.
 
     This class provides text embedding capabilities using the Mixedbread AI API,
-    integrating with LangChain's standard Embeddings interface with enhanced 
+    integrating with LangChain's standard Embeddings interface with enhanced
     async support, error handling, and metadata tracking.
     """
-    
+
     model: str = Field(
         default="mixedbread-ai/mxbai-embed-large-v1",
-        description="The Mixedbread model to use for embeddings"
+        description="The Mixedbread model to use for embeddings",
     )
     normalized: bool = Field(
-        default=True,
-        description="Whether to normalize the embeddings"
+        default=True, description="Whether to normalize the embeddings"
     )
     encoding_format: MixedbreadEmbeddingType = Field(
-        default=MixedbreadEmbeddingType.FLOAT,
-        description="Format for the embeddings"
+        default=MixedbreadEmbeddingType.FLOAT, description="Format for the embeddings"
     )
     dimensions: Optional[int] = Field(
-        default=None,
-        description="Target dimensions for the embeddings"
+        default=None, description="Target dimensions for the embeddings"
     )
     prompt: Optional[str] = Field(
-        default=None,
-        description="Optional prompt to use for embeddings"
+        default=None, description="Optional prompt to use for embeddings"
     )
-    
+
     class Config:
         arbitrary_types_allowed = True
-        
+
     def __init__(
         self,
         model: str = "mixedbread-ai/mxbai-embed-large-v1",
-        api_key: Union[Secret, str, None] = None,
+        api_key: Union[SecretStr, str, None] = None,
         normalized: bool = True,
         encoding_format: Union[
             str, MixedbreadEmbeddingType
@@ -86,7 +83,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             encoding_format=encoding_format,
             dimensions=dimensions,
             prompt=prompt,
-            **kwargs
+            **kwargs,
         )
 
         self._client = MixedbreadClient(
@@ -109,7 +106,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
         if not text.strip():
             logger.warning("Empty text provided for embedding")
             return []
-            
+
         try:
             response: EmbeddingCreateResponse = self._client.client.embed(
                 model=self.model,
@@ -121,13 +118,13 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             )
 
             embedding = response.data[0].embedding if response.data else []
-            
+
             # Log metadata for debugging
             meta = create_response_meta(response, include_embedder_fields=True)
             logger.debug(f"Query embedding completed: {meta}")
-            
+
             return embedding
-            
+
         except Exception as e:
             return self._handle_api_error(e, "query embedding", [])
 
@@ -144,7 +141,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
         if not texts:
             logger.info("Empty text list provided for embedding")
             return []
-            
+
         # Filter out empty texts but maintain positions
         non_empty_texts = []
         text_positions = []
@@ -152,7 +149,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             if text.strip():
                 non_empty_texts.append(text)
                 text_positions.append(i)
-        
+
         if not non_empty_texts:
             logger.warning("All provided texts are empty")
             return [[] for _ in texts]
@@ -167,20 +164,22 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
                 prompt=self.prompt,
             )
 
-            embeddings = [item.embedding for item in response.data] if response.data else []
-            
+            embeddings = (
+                [item.embedding for item in response.data] if response.data else []
+            )
+
             # Reconstruct full results with empty embeddings for empty texts
             full_results = [[] for _ in texts]
             for i, embedding in enumerate(embeddings):
                 if i < len(text_positions):
                     full_results[text_positions[i]] = embedding
-                    
+
             # Log metadata for debugging
             meta = create_response_meta(response, include_embedder_fields=True)
             logger.debug(f"Document embedding completed: {meta}")
-            
+
             return full_results
-            
+
         except Exception as e:
             return self._handle_api_error(e, "document embedding", [[] for _ in texts])
 
@@ -197,7 +196,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
         if not text.strip():
             logger.warning("Empty text provided for async embedding")
             return []
-            
+
         try:
             response: EmbeddingCreateResponse = await self._client.async_client.embed(
                 model=self.model,
@@ -209,13 +208,13 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             )
 
             embedding = response.data[0].embedding if response.data else []
-            
+
             # Log metadata for debugging
             meta = create_response_meta(response, include_embedder_fields=True)
             logger.debug(f"Async query embedding completed: {meta}")
-            
+
             return embedding
-            
+
         except Exception as e:
             return self._handle_api_error(e, "async query embedding", [])
 
@@ -232,7 +231,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
         if not texts:
             logger.info("Empty text list provided for async embedding")
             return []
-            
+
         # Filter out empty texts but maintain positions
         non_empty_texts = []
         text_positions = []
@@ -240,7 +239,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             if text.strip():
                 non_empty_texts.append(text)
                 text_positions.append(i)
-        
+
         if not non_empty_texts:
             logger.warning("All provided texts are empty")
             return [[] for _ in texts]
@@ -255,37 +254,41 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
                 prompt=self.prompt,
             )
 
-            embeddings = [item.embedding for item in response.data] if response.data else []
-            
+            embeddings = (
+                [item.embedding for item in response.data] if response.data else []
+            )
+
             # Reconstruct full results with empty embeddings for empty texts
             full_results = [[] for _ in texts]
             for i, embedding in enumerate(embeddings):
                 if i < len(text_positions):
                     full_results[text_positions[i]] = embedding
-                    
+
             # Log metadata for debugging
             meta = create_response_meta(response, include_embedder_fields=True)
             logger.debug(f"Async document embedding completed: {meta}")
-            
+
             return full_results
-            
+
         except Exception as e:
-            return self._handle_api_error(e, "async document embedding", [[] for _ in texts])
-            
+            return self._handle_api_error(
+                e, "async document embedding", [[] for _ in texts]
+            )
+
     def embed_with_metadata(self, text: str) -> Dict[str, Any]:
         """
         Embed a single text and return both embedding and metadata.
-        
+
         Args:
             text: The text to embed.
-            
+
         Returns:
             Dictionary containing embedding and metadata.
         """
         if not text.strip():
             logger.warning("Empty text provided for embedding with metadata")
             return create_empty_embedding_response(self.model)
-            
+
         try:
             response: EmbeddingCreateResponse = self._client.client.embed(
                 model=self.model,
@@ -300,25 +303,25 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             meta = create_response_meta(response, include_embedder_fields=True)
 
             return {"embedding": embedding, "meta": meta}
-            
+
         except Exception as e:
             logger.error(f"Error during embedding with metadata: {str(e)}")
             raise
-            
+
     async def aembed_with_metadata(self, text: str) -> Dict[str, Any]:
         """
         Async version of embed_with_metadata.
-        
+
         Args:
             text: The text to embed.
-            
+
         Returns:
             Dictionary containing embedding and metadata.
         """
         if not text.strip():
             logger.warning("Empty text provided for async embedding with metadata")
             return create_empty_embedding_response(self.model)
-            
+
         try:
             response: EmbeddingCreateResponse = await self._client.async_client.embed(
                 model=self.model,
@@ -333,7 +336,7 @@ class MixedbreadEmbeddings(Embeddings, BaseModel, SerializationMixin, AsyncMixin
             meta = create_response_meta(response, include_embedder_fields=True)
 
             return {"embedding": embedding, "meta": meta}
-            
+
         except Exception as e:
             logger.error(f"Error during async embedding with metadata: {str(e)}")
             raise

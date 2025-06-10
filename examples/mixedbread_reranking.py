@@ -24,7 +24,6 @@ reranker = MixedbreadReranker(model="mixedbread-ai/mxbai-rerank-large-v2", top_k
 
 query = "Tell me about German bread traditions"
 
-# Example 1: Sync reranking
 print("=== Sync reranking ===")
 reranked_docs = reranker.compress_documents(documents, query)
 

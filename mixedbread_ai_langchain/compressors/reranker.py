@@ -1,24 +1,27 @@
 from typing import Any, List, Optional, Sequence, Union, Dict
 from langchain_core.documents import Document
 from langchain_core.documents.compressor import BaseDocumentCompressor
-from langchain_core.utils import Secret
+from pydantic import SecretStr
 from mixedbread.types import RerankResponse
 from pydantic import Field, PrivateAttr
 
 from ..common.client import MixedbreadClient
 from ..common.mixins import SerializationMixin, AsyncMixin, ErrorHandlingMixin
 from ..common.utils import (
-    validate_documents, 
-    create_response_meta, 
+    validate_documents,
+    create_response_meta,
     create_empty_reranking_response,
-    prepare_documents_for_processing
+    prepare_documents_for_processing,
 )
 from ..common.logging import get_logger
+from langchain_core.callbacks import Callbacks
 
 logger = get_logger(__name__)
 
 
-class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin, ErrorHandlingMixin):
+class MixedbreadReranker(
+    BaseDocumentCompressor, SerializationMixin, AsyncMixin, ErrorHandlingMixin
+):
     """
     Document compressor that uses Mixedbread AI for reranking.
 
@@ -43,7 +46,7 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
     def __init__(
         self,
         model: str = "mixedbread-ai/mxbai-rerank-large-v2",
-        api_key: Union[Secret, str, None] = None,
+        api_key: Union[SecretStr, str, None] = None,
         top_k: int = 3,
         return_input: bool = True,
         base_url: Optional[str] = None,
@@ -65,10 +68,7 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
             **kwargs: Additional arguments passed to parent classes.
         """
         super().__init__(
-            model=model,
-            top_k=max(1, top_k),
-            return_input=return_input,
-            **kwargs
+            model=model, top_k=max(1, top_k), return_input=return_input, **kwargs
         )
 
         self._client = MixedbreadClient(
@@ -110,7 +110,7 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
             return list(documents)
 
         reranked_docs = []
-        
+
         # Create response metadata for logging
         meta = create_response_meta(reranking_response, include_reranker_fields=True)
         logger.debug(f"Reranking completed: {meta}")
@@ -132,12 +132,13 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
                 )
 
                 reranked_doc = Document(
-                    page_content=original_doc.page_content, 
-                    metadata=reranked_metadata
+                    page_content=original_doc.page_content, metadata=reranked_metadata
                 )
                 reranked_docs.append(reranked_doc)
             else:
-                logger.warning(f"Rerank result index {result.index} is out of range for {len(documents)} documents")
+                logger.warning(
+                    f"Rerank result index {result.index} is out of range for {len(documents)} documents"
+                )
 
         return reranked_docs
 
@@ -156,13 +157,12 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
         Returns:
             Sequence of reranked documents, limited to top_k results.
         """
-        # Validate inputs
         try:
             validate_documents(list(documents))
         except TypeError as e:
             logger.error(f"Invalid documents provided: {e}")
             return []
-            
+
         if not documents:
             logger.info("Empty document list provided for reranking")
             return []
@@ -183,12 +183,16 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
             )
 
             reranked_docs = self._apply_reranking_results(documents, response)
-            
-            logger.info(f"Reranking completed: {len(reranked_docs)} documents returned from {len(documents)} input documents")
+
+            logger.info(
+                f"Reranking completed: {len(reranked_docs)} documents returned from {len(documents)} input documents"
+            )
             return reranked_docs
 
         except Exception as e:
-            return self._handle_api_error(e, "document reranking", documents[: self.top_k])
+            return self._handle_api_error(
+                e, "document reranking", documents[: self.top_k]
+            )
 
     async def acompress_documents(
         self,
@@ -205,13 +209,12 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
         Returns:
             Sequence of reranked documents, limited to top_k results.
         """
-        # Validate inputs
         try:
             validate_documents(list(documents))
         except TypeError as e:
             logger.error(f"Invalid documents provided: {e}")
             return []
-            
+
         if not documents:
             logger.info("Empty document list provided for async reranking")
             return []
@@ -232,13 +235,17 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
             )
 
             reranked_docs = self._apply_reranking_results(documents, response)
-            
-            logger.info(f"Async reranking completed: {len(reranked_docs)} documents returned from {len(documents)} input documents")
+
+            logger.info(
+                f"Async reranking completed: {len(reranked_docs)} documents returned from {len(documents)} input documents"
+            )
             return reranked_docs
 
         except Exception as e:
-            return self._handle_api_error(e, "async document reranking", documents[: self.top_k])
-            
+            return self._handle_api_error(
+                e, "async document reranking", documents[: self.top_k]
+            )
+
     def rerank_with_metadata(
         self,
         documents: Sequence[Document],
@@ -246,21 +253,20 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
     ) -> Dict[str, Any]:
         """
         Rerank documents and return both results and metadata.
-        
+
         Args:
             documents: Sequence of documents to rerank.
             query: The query to rank documents against.
-            
+
         Returns:
             Dictionary containing reranked documents and metadata.
         """
-        # Validate inputs
         try:
             validate_documents(list(documents))
         except TypeError as e:
             logger.error(f"Invalid documents provided: {e}")
             return create_empty_reranking_response(self.model)
-            
+
         if not documents:
             logger.info("Empty document list provided for reranking with metadata")
             return create_empty_reranking_response(self.model)
@@ -291,7 +297,7 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
         except Exception as e:
             logger.error(f"Error during reranking with metadata: {str(e)}")
             raise
-            
+
     async def arerank_with_metadata(
         self,
         documents: Sequence[Document],
@@ -299,23 +305,24 @@ class MixedbreadReranker(BaseDocumentCompressor, SerializationMixin, AsyncMixin,
     ) -> Dict[str, Any]:
         """
         Async version of rerank_with_metadata.
-        
+
         Args:
             documents: Sequence of documents to rerank.
             query: The query to rank documents against.
-            
+
         Returns:
             Dictionary containing reranked documents and metadata.
         """
-        # Validate inputs
         try:
             validate_documents(list(documents))
         except TypeError as e:
             logger.error(f"Invalid documents provided: {e}")
             return create_empty_reranking_response(self.model)
-            
+
         if not documents:
-            logger.info("Empty document list provided for async reranking with metadata")
+            logger.info(
+                "Empty document list provided for async reranking with metadata"
+            )
             return create_empty_reranking_response(self.model)
 
         if not query.strip():

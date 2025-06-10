@@ -5,7 +5,7 @@ from .test_config import TestConfig
 
 
 DEFAULT_VALUES = {
-    "model": "mixedbread-ai/mxbai-rerank-large-v1",  # This is the actual default in the code
+    "model": "mixedbread-ai/mxbai-rerank-large-v2",  # Updated to match actual default
     "top_k": 3,
     "return_input": True,
 }

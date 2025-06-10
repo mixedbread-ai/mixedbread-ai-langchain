@@ -1,9 +1,8 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
-from langchain_core.utils import Secret
-from pydantic import Field, PrivateAttr
+from pydantic import SecretStr, Field, PrivateAttr
 
 from mixedbread.types import VectorStoreSearchResponse
 from ..common.client import MixedbreadClient
@@ -12,25 +11,26 @@ from ..common.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Import async client directly from mixedbread SDK
-try:
-    from mixedbread import AsyncMixedbread
-except ImportError:
-    AsyncMixedbread = None
+if TYPE_CHECKING:
+    from mixedbread import AsyncMixedbread as AsyncMixedbreadSDKClient
+else:
+    AsyncMixedbreadSDKClient = Any
 
 
-class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMixin, ErrorHandlingMixin):
+class MixedbreadVectorStoreRetriever(
+    BaseRetriever, SerializationMixin, AsyncMixin, ErrorHandlingMixin
+):
     """
     Mixedbread AI Vector Store retriever for LangChain.
-    
+
     This retriever searches through Mixedbread AI vector stores with enhanced
     async support, error handling, and direct client access.
-    
+
     Usage:
         # Sync operations
         retriever = MixedbreadVectorStoreRetriever(vector_store_ids=["store_id"])
         docs = retriever.get_relevant_documents("query")
-        
+
         # Async operations (direct client access)
         results = await retriever.aclient.vector_stores.search(
             query="query", vector_store_ids=["store_id"], top_k=5
@@ -52,13 +52,13 @@ class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMix
     )
 
     _client: MixedbreadClient = PrivateAttr()
+    # Note: async client is accessed via self._client.async_client
 
     def __init__(
         self,
         vector_store_ids: List[str],
-        api_key: Union[Secret, str, None] = None,
+        api_key: Union[SecretStr, str, None] = None,
         sync_client: Optional[MixedbreadClient] = None,
-        async_client: Optional[Any] = None,
         top_k: int = 10,
         score_threshold: Optional[float] = None,
         return_metadata: bool = True,
@@ -70,7 +70,7 @@ class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMix
     ):
         """
         Initialize the Mixedbread vector store retriever.
-        
+
         Args:
             vector_store_ids: List of vector store IDs to search in.
             api_key: API key for Mixedbread AI (or set MXBAI_API_KEY env var).
@@ -111,27 +111,14 @@ class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMix
                 timeout=timeout,
                 max_retries=max_retries,
             )
-            
-        # Set up async client for direct access
-        if async_client:
-            self.aclient = async_client
-        elif AsyncMixedbread:
-            resolved_api_key = api_key
-            if isinstance(api_key, Secret):
-                resolved_api_key = api_key.resolve_value()
-            elif api_key is None:
-                import os
-                resolved_api_key = os.environ.get("MXBAI_API_KEY")
-                
-            self.aclient = AsyncMixedbread(
-                api_key=resolved_api_key,
-                base_url=base_url,
-                timeout=timeout,
-                max_retries=max_retries,
-            )
-        else:
-            logger.warning("AsyncMixedbread not available. Use search_async() for async operations.")
-            self.aclient = None
+
+        # Use unified client approach - async client is available via MixedbreadClient
+        # No separate async client management needed
+
+    @property
+    def aclient(self) -> AsyncMixedbreadSDKClient:
+        """Get the async client for direct API access."""
+        return self._client.async_client
 
     def _convert_search_results_to_documents(
         self, search_response: VectorStoreSearchResponse
@@ -172,32 +159,34 @@ class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMix
     def _search_vector_stores(self, query: str) -> List[Document]:
         """
         Search vector stores and return documents.
-        
+
         Args:
             query: Query string to search for.
-            
+
         Returns:
             List of documents from search results.
         """
         try:
-            logger.debug(f"Searching vector stores {self.vector_store_ids} with query: {query[:50]}...")
-            
+            logger.debug(
+                f"Searching vector stores {self.vector_store_ids} with query: {query[:50]}..."
+            )
+
             # Prepare request body for the new API structure
             search_request = {
                 "query": query,
                 "vector_store_ids": self.vector_store_ids,
                 "top_k": self.top_k,
             }
-            
+
             # Add optional parameters
             if self.score_threshold is not None:
                 search_request["score_threshold"] = self.score_threshold
             if self.return_metadata:
                 search_request["return_metadata"] = self.return_metadata
-                
+
             # Add any additional search options
             search_request.update(self.search_options)
-            
+
             response: VectorStoreSearchResponse = (
                 self._client.client.vector_stores.search(**search_request)
             )
@@ -213,32 +202,32 @@ class MixedbreadVectorStoreRetriever(BaseRetriever, SerializationMixin, AsyncMix
         """
         Convenience method that returns an awaitable for async search.
         For direct async operations, use retriever.aclient.vector_stores.search() instead.
-        
+
         Args:
             query: Query string to search for.
-            
+
         Returns:
             Awaitable that resolves to search response from the API.
         """
-        if not self.aclient:
-            raise RuntimeError("Async client not available. Initialize with async_client or ensure AsyncMixedbread is installed.")
-            
+        # Async client is always available through MixedbreadClient
+        async_client = self._client.async_client
+
         search_request = {
             "query": query,
             "vector_store_ids": self.vector_store_ids,
             "top_k": self.top_k,
         }
-        
+
         # Add optional parameters
         if self.score_threshold is not None:
             search_request["score_threshold"] = self.score_threshold
         if self.return_metadata:
             search_request["return_metadata"] = self.return_metadata
-            
+
         # Add any additional search options
         search_request.update(self.search_options)
-        
-        return self.aclient.vector_stores.search(**search_request)
+
+        return async_client.vector_stores.search(**search_request)
 
     def _get_relevant_documents(
         self,

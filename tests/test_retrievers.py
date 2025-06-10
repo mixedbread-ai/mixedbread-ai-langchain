@@ -125,19 +125,24 @@ class TestMixedbreadVectorStoreRetriever:
         assert call_args["top_k"] == 10
         assert call_args["return_metadata"] is True
         
-    @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.AsyncMixedbread")
-    def test_search_async_convenience_method(self, mock_async_client_class):
+    @patch("mixedbread_ai_langchain.common.client.MixedbreadClient")
+    def test_search_async_convenience_method(self, mock_client_class):
         """
         Test the search_async convenience method.
         """
-        # Mock the async client
+        # Mock the MixedbreadClient and its async_client property
+        mock_client = Mock()
         mock_async_client = Mock()
-        mock_async_client_class.return_value = mock_async_client
+        mock_client.async_client = mock_async_client
+        mock_client_class.return_value = mock_client
         
         retriever = MixedbreadVectorStoreRetriever(
             vector_store_ids=["test-store"],
             api_key="fake-api-key"
         )
+        
+        # Override the client's async_client for testing
+        retriever._client._async_client = mock_async_client
         
         # Test that the convenience method returns the right awaitable
         result = retriever.search_async("test query")
@@ -150,19 +155,24 @@ class TestMixedbreadVectorStoreRetriever:
             return_metadata=True
         )
         
-    @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.AsyncMixedbread")
-    def test_direct_async_client_access(self, mock_async_client_class):
+    @patch("mixedbread_ai_langchain.common.client.MixedbreadClient")
+    def test_direct_async_client_access(self, mock_client_class):
         """
         Test direct access to the async client.
         """
-        # Mock the async client
+        # Mock the MixedbreadClient and its async_client property
+        mock_client = Mock()
         mock_async_client = Mock()
-        mock_async_client_class.return_value = mock_async_client
+        mock_client.async_client = mock_async_client
+        mock_client_class.return_value = mock_client
         
         retriever = MixedbreadVectorStoreRetriever(
             vector_store_ids=["test-store"],
             api_key="fake-api-key"
         )
+        
+        # Override the client's async_client for testing
+        retriever._client._async_client = mock_async_client
         
         # Test direct client access
         assert retriever.aclient == mock_async_client
@@ -315,14 +325,16 @@ class TestMixedbreadVectorStoreFileRetriever:
         assert call_args["return_metadata"] is True
         assert call_args["return_chunks"] is False
         
-    @patch("mixedbread_ai_langchain.retrievers.vector_store_file_retriever.AsyncMixedbread")
-    def test_file_search_async_convenience_method(self, mock_async_client_class):
+    @patch("mixedbread_ai_langchain.common.client.MixedbreadClient")
+    def test_file_search_async_convenience_method(self, mock_client_class):
         """
         Test the search_async convenience method for file retriever.
         """
-        # Mock the async client
+        # Mock the MixedbreadClient and its async_client property
+        mock_client = Mock()
         mock_async_client = Mock()
-        mock_async_client_class.return_value = mock_async_client
+        mock_client.async_client = mock_async_client
+        mock_client_class.return_value = mock_client
         
         retriever = MixedbreadVectorStoreFileRetriever(
             vector_store_ids=["test-store"],
@@ -330,6 +342,9 @@ class TestMixedbreadVectorStoreFileRetriever:
             include_chunks=True,
             chunk_limit=3
         )
+        
+        # Override the client's async_client for testing
+        retriever._client._async_client = mock_async_client
         
         # Test that the convenience method returns the right awaitable
         result = retriever.search_async("test query")
@@ -339,24 +354,28 @@ class TestMixedbreadVectorStoreFileRetriever:
             query="test query",
             vector_store_ids=["test-store"],
             top_k=10,
-            return_metadata=True,
             return_chunks=True,
             chunk_limit=3
         )
         
-    @patch("mixedbread_ai_langchain.retrievers.vector_store_file_retriever.AsyncMixedbread")
-    def test_file_direct_async_client_access(self, mock_async_client_class):
+    @patch("mixedbread_ai_langchain.common.client.MixedbreadClient")
+    def test_file_direct_async_client_access(self, mock_client_class):
         """
         Test direct access to the async client for file retriever.
         """
-        # Mock the async client
+        # Mock the MixedbreadClient and its async_client property
+        mock_client = Mock()
         mock_async_client = Mock()
-        mock_async_client_class.return_value = mock_async_client
+        mock_client.async_client = mock_async_client
+        mock_client_class.return_value = mock_client
         
         retriever = MixedbreadVectorStoreFileRetriever(
             vector_store_ids=["test-store"],
             api_key="fake-api-key"
         )
+        
+        # Override the client's async_client for testing
+        retriever._client._async_client = mock_async_client
         
         # Test direct client access
         assert retriever.aclient == mock_async_client

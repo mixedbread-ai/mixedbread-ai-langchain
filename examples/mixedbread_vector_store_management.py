@@ -1,10 +1,3 @@
-"""
-Comprehensive Vector Store Management Example
-
-This example demonstrates the full range of vector store management capabilities
-including CRUD operations, file management, and retrieval functionality.
-"""
-
 import asyncio
 from mixedbread_ai_langchain import MixedbreadVectorStoreManager
 

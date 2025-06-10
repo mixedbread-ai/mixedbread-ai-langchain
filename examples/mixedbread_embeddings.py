@@ -1,4 +1,3 @@
-from langchain_core.documents import Document
 from mixedbread_ai_langchain import MixedbreadEmbeddings
 
 embeddings = MixedbreadEmbeddings()
