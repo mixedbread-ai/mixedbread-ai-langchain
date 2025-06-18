@@ -79,6 +79,28 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
         self._client = Mixedbread(**client_kwargs)
         self._async_client = AsyncMixedbread(**client_kwargs)
 
+    def _extract_chunk_content(self, chunk) -> str:
+        """Extract content from a chunk based on its type."""
+        chunk_type = getattr(chunk, "type", "text")
+        
+        if chunk_type == "text":
+            return getattr(chunk, "text", "")
+        elif chunk_type == "image_url":
+            # Use OCR text for images, fallback to summary
+            ocr_text = getattr(chunk, "ocr_text", "")
+            if ocr_text:
+                return ocr_text
+            return getattr(chunk, "summary", "")
+        elif chunk_type == "audio_url":
+            # Use transcription for audio, fallback to summary
+            transcription = getattr(chunk, "transcription", "")
+            if transcription:
+                return transcription
+            return getattr(chunk, "summary", "")
+        else:
+            # Fallback for unknown types
+            return getattr(chunk, "text", getattr(chunk, "summary", ""))
+
     def _convert_results_to_documents(self, search_response) -> List[Document]:
         """Convert search results to LangChain Documents."""
         documents = []
@@ -86,27 +108,50 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
         for item in search_response.data:
             if self.search_type == "chunk":
                 # Chunk search results
-                page_content = getattr(item, "content", "") or ""
+                page_content = self._extract_chunk_content(item)
+                
+                # Build metadata from chunk attributes
                 metadata = {
-                    "source": getattr(item, "filename", "unknown"),
+                    "filename": getattr(item, "filename", "unknown"),
                     "score": getattr(item, "score", 0.0),
+                    "chunk_index": getattr(item, "chunk_index", None),
+                    "file_id": getattr(item, "file_id", None),
+                    "type": getattr(item, "type", "text"),
+                    "mime_type": getattr(item, "mime_type", None),
                 }
+                
+                # Add custom metadata if present
+                if hasattr(item, "metadata") and item.metadata:
+                    metadata.update(item.metadata)
+                    
             else:
                 # File search results
                 if hasattr(item, "chunks") and item.chunks:
-                    # Combine chunk content
-                    chunk_texts = [
-                        chunk.content for chunk in item.chunks if hasattr(chunk, "content") and chunk.content
-                    ]
-                    page_content = "\n\n".join(chunk_texts) if chunk_texts else f"File: {getattr(item, 'filename', 'Unknown file')}"
+                    # Combine chunk content from all chunks
+                    chunk_texts = []
+                    for chunk in item.chunks:
+                        chunk_content = self._extract_chunk_content(chunk)
+                        if chunk_content.strip():
+                            chunk_texts.append(chunk_content)
+                    
+                    page_content = "\n\n".join(chunk_texts) if chunk_texts else f"[File: {getattr(item, 'filename', 'Unknown file')} - No extractable content in chunks]"
                 else:
-                    page_content = f"File: {getattr(item, 'filename', 'Unknown file')}"
+                    page_content = f"[File: {getattr(item, 'filename', 'Unknown file')} - No chunks returned by API]"
 
+                # Build metadata from file attributes
                 metadata = {
-                    "source": getattr(item, "filename", "unknown"),
+                    "filename": getattr(item, "filename", "unknown"),
                     "score": getattr(item, "score", 0.0),
                     "file_id": getattr(item, "id", None),
+                    "vector_store_id": getattr(item, "vector_store_id", None),
+                    "status": getattr(item, "status", None),
+                    "created_at": getattr(item, "created_at", None),
+                    "usage_bytes": getattr(item, "usage_bytes", None),
                 }
+                
+                # Add custom metadata if present
+                if hasattr(item, "metadata") and item.metadata:
+                    metadata.update(item.metadata)
 
             document = Document(page_content=page_content, metadata=metadata)
             documents.append(document)
@@ -130,6 +175,7 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
                 "query": query,
                 "vector_store_identifiers": self.vector_store_identifiers,
                 "top_k": self.top_k,
+                "search_options": {"return_metadata": True},
             }
 
             if self.score_threshold is not None:
@@ -138,6 +184,8 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
             if self.search_type == "chunk":
                 response = self._client.vector_stores.search(**search_request)
             else:
+                # Add return_chunks for file search only
+                search_request["search_options"]["return_chunks"] = True
                 response = self._client.vector_stores.files.search(**search_request)
 
             documents = self._convert_results_to_documents(response)
@@ -164,6 +212,7 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
                 "query": query,
                 "vector_store_identifiers": self.vector_store_identifiers,
                 "top_k": self.top_k,
+                "search_options": {"return_metadata": True},
             }
 
             if self.score_threshold is not None:
@@ -172,6 +221,8 @@ class MixedbreadVectorStoreRetriever(BaseRetriever):
             if self.search_type == "chunk":
                 response = await self._async_client.vector_stores.search(**search_request)
             else:
+                # Add return_chunks for file search only
+                search_request["search_options"]["return_chunks"] = True
                 response = await self._async_client.vector_stores.files.search(**search_request)
 
             documents = self._convert_results_to_documents(response)

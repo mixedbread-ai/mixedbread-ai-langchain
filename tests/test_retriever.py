@@ -16,10 +16,24 @@ class MockSearchResponse:
 
 class MockChunkResult:
     """Mock chunk search result."""
-    def __init__(self, content="Test content", filename="test.pdf", score=0.8):
-        self.content = content
+    def __init__(self, content="Test content", filename="test.pdf", score=0.8, chunk_type="text"):
+        # New API structure uses text, ocr_text, transcription instead of content
+        self.type = chunk_type
+        if chunk_type == "text":
+            self.text = content
+        elif chunk_type == "image_url":
+            self.ocr_text = content
+        elif chunk_type == "audio_url":
+            self.transcription = content
+        else:
+            self.text = content  # fallback
+        
         self.filename = filename
         self.score = score
+        self.chunk_index = 0
+        self.file_id = "test_file_id"
+        self.mime_type = "text/plain"
+        self.metadata = {}
 
 
 class MockFileResult:
@@ -29,6 +43,11 @@ class MockFileResult:
         self.score = score
         self.id = file_id
         self.chunks = chunks or []
+        self.vector_store_id = "test_vector_store"
+        self.status = "completed"
+        self.created_at = "2024-01-01T00:00:00Z"
+        self.usage_bytes = 1024
+        self.metadata = {}
 
 
 class TestMixedbreadVectorStoreRetriever:
@@ -101,11 +120,11 @@ class TestMixedbreadVectorStoreRetriever:
             
             assert len(documents) == 2
             assert documents[0].page_content == "Content 1"
-            assert documents[0].metadata["source"] == "file1.pdf"
+            assert documents[0].metadata["filename"] == "file1.pdf"
             assert documents[0].metadata["score"] == 0.9
             
             assert documents[1].page_content == "Content 2"
-            assert documents[1].metadata["source"] == "file2.pdf"
+            assert documents[1].metadata["filename"] == "file2.pdf"
             assert documents[1].metadata["score"] == 0.7
 
     def test_convert_file_results(self):
@@ -129,7 +148,7 @@ class TestMixedbreadVectorStoreRetriever:
             
             assert len(documents) == 1
             assert documents[0].page_content == "Chunk 1 content\n\nChunk 2 content"
-            assert documents[0].metadata["source"] == "document.pdf"
+            assert documents[0].metadata["filename"] == "document.pdf"
             assert documents[0].metadata["score"] == 0.8
             assert documents[0].metadata["file_id"] == "file_123"
 
@@ -150,8 +169,8 @@ class TestMixedbreadVectorStoreRetriever:
             documents = retriever._convert_results_to_documents(mock_response)
             
             assert len(documents) == 1
-            assert documents[0].page_content == "File: document.pdf"
-            assert documents[0].metadata["source"] == "document.pdf"
+            assert documents[0].page_content == "[File: document.pdf - No chunks returned by API]"
+            assert documents[0].metadata["filename"] == "document.pdf"
 
     @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.Mixedbread")
     def test_get_relevant_documents_chunk_search(self, mock_mixedbread_class):
@@ -186,6 +205,7 @@ class TestMixedbreadVectorStoreRetriever:
                 query="test query",
                 vector_store_identifiers=["store1"],
                 top_k=10,
+                search_options={"return_metadata": True},
             )
 
     @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.AsyncMixedbread")
@@ -226,6 +246,7 @@ class TestMixedbreadVectorStoreRetriever:
                 vector_store_identifiers=["store1"],
                 top_k=10,
                 score_threshold=0.5,
+                search_options={"return_metadata": True, "return_chunks": True},
             )
 
     @patch("mixedbread_ai_langchain.retrievers.vector_store_retriever.Mixedbread")

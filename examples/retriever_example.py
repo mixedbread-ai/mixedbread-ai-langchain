@@ -14,7 +14,7 @@ def chunk_search_example():
 
     # Initialize retriever for chunk-level search
     retriever = MixedbreadVectorStoreRetriever(
-        vector_store_identifiers=["your-vector-store-id"],
+        vector_store_identifiers=["9daea3ae-b451-412c-af1f-da0712f32cb5"],
         search_type="chunk",  # Default - searches individual chunks
         top_k=5,
         # api_key="your-api-key"  # or set MXBAI_API_KEY env var
@@ -31,7 +31,7 @@ def chunk_search_example():
     for i, doc in enumerate(documents):
         print(f"Chunk {i+1}:")
         print(f"  Content: {doc.page_content[:100]}...")
-        print(f"  Source: {doc.metadata.get('source', 'unknown')}")
+        print(f"  Source: {doc.metadata.get('filename', 'unknown')}")
         print(f"  Score: {doc.metadata.get('score', 'N/A'):.3f}")
         print()
 
@@ -42,14 +42,13 @@ def file_search_example():
 
     # Initialize retriever for file-level search
     retriever = MixedbreadVectorStoreRetriever(
-        vector_store_identifiers=["your-vector-store-id"],
+        vector_store_identifiers=["9daea3ae-b451-412c-af1f-da0712f32cb5"],
         search_type="file",  # Searches files and aggregates chunk content
         top_k=3,
-        score_threshold=0.5,  # Only return results above this score
     )
 
     # Search for relevant files
-    query = "artificial intelligence research papers"
+    query = "machine learning"  # Use a query that matches our data better
     documents = retriever.invoke(query)
 
     print(f"Query: {query}")
@@ -58,7 +57,7 @@ def file_search_example():
 
     for i, doc in enumerate(documents):
         print(f"File {i+1}:")
-        print(f"  Source: {doc.metadata.get('source', 'unknown')}")
+        print(f"  Source: {doc.metadata.get('filename', 'unknown')}")
         print(f"  File ID: {doc.metadata.get('file_id', 'N/A')}")
         print(f"  Score: {doc.metadata.get('score', 'N/A'):.3f}")
         print(f"  Content length: {len(doc.page_content)} characters")
@@ -72,7 +71,10 @@ async def async_search_example():
 
     # Initialize retriever
     retriever = MixedbreadVectorStoreRetriever(
-        vector_store_identifiers=["store-1", "store-2"],  # Multiple stores
+        vector_store_identifiers=[
+            "9daea3ae-b451-412c-af1f-da0712f32cb5",
+            "4107dac2-cfe7-494c-9ec6-c3581a6c8cc1",
+        ],  # Multiple stores
         search_type="chunk",
         top_k=4,
     )
@@ -117,7 +119,7 @@ def multiple_stores_example():
     # Group results by source
     sources = {}
     for doc in documents:
-        source = doc.metadata.get("source", "unknown")
+        source = doc.metadata.get("filename", "unknown")
         if source not in sources:
             sources[source] = []
         sources[source].append(doc)
