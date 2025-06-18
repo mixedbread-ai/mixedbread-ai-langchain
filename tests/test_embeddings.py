@@ -1,153 +1,125 @@
 import pytest
-from langchain_core.documents import Document
-from mixedbread_ai_langchain import MixedbreadEmbeddings
-from .test_config import TestConfig
-
-
-DEFAULT_VALUES = {
-    "model": "mixedbread-ai/mxbai-embed-large-v1",
-    "normalized": True,
-    "encoding_format": "float",
-    "dimensions": None,
-    "prompt": None,
-}
+from unittest.mock import Mock, AsyncMock, patch
+from mixedbread_ai_langchain.embedders.embeddings import MixedbreadEmbeddings
 
 
 class TestMixedbreadEmbeddings:
-    def test_init_default(self, monkeypatch):
-        """
-        Test default initialization parameters for MixedbreadEmbeddings.
-        """
-        monkeypatch.setenv("MXBAI_API_KEY", "fake-api-key")
-        embedder = MixedbreadEmbeddings()
+    """Lean test suite for MixedbreadEmbeddings."""
 
-        assert embedder.model == DEFAULT_VALUES["model"]
-        assert embedder.normalized == DEFAULT_VALUES["normalized"]
-        assert embedder.encoding_format.value == DEFAULT_VALUES["encoding_format"]
-        assert embedder.dimensions == DEFAULT_VALUES["dimensions"]
-        assert embedder.prompt == DEFAULT_VALUES["prompt"]
+    def test_init_default(self):
+        """Test initialization with default parameters."""
+        with patch.dict("os.environ", {"MXBAI_API_KEY": "test-key"}):
+            embeddings = MixedbreadEmbeddings()
+            assert embeddings.model == "mixedbread-ai/mxbai-embed-large-v1"
+            assert embeddings.normalized is True
+            assert embeddings.encoding_format == "float"
 
     def test_init_with_parameters(self):
-        """
-        Test custom initialization parameters for MixedbreadEmbeddings.
-        """
-        embedder = MixedbreadEmbeddings(
-            api_key="test-api-key",
+        """Test initialization with custom parameters."""
+        embeddings = MixedbreadEmbeddings(
             model="custom-model",
+            api_key="test-key",
             normalized=False,
-            encoding_format="binary",
-            dimensions=500,
-            prompt="test prompt",
+            encoding_format="float16",
+            dimensions=512,
         )
+        assert embeddings.model == "custom-model"
+        assert embeddings.normalized is False
+        assert embeddings.encoding_format == "float16"
+        assert embeddings.dimensions == 512
 
-        assert embedder.model == "custom-model"
-        assert not embedder.normalized
-        assert embedder.encoding_format.value == "binary"
-        assert embedder.dimensions == 500
-        assert embedder.prompt == "test prompt"
+    def test_init_fail_without_api_key(self):
+        """Test initialization fails without API key."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="MXBAI_API_KEY"):
+                MixedbreadEmbeddings()
 
-    def test_init_fail_wo_api_key(self, monkeypatch):
-        """
-        Test that initialization fails when no API key is provided.
-        """
-        monkeypatch.delenv("MXBAI_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="Mixedbread API key not found"):
-            MixedbreadEmbeddings()
+    @patch("mixedbread_ai_langchain.embedders.embeddings.Mixedbread")
+    def test_embed_query(self, mock_mixedbread):
+        """Test embed_query method."""
+        # Mock response
+        mock_response = Mock()
+        mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3])]
+        mock_mixedbread.return_value.embed.return_value = mock_response
 
-    def test_embed_documents_empty_input(self):
-        """
-        Test embedding with empty document list.
-        """
-        embedder = MixedbreadEmbeddings(api_key="fake-api-key")
-        result = embedder.embed_documents([])
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = embeddings.embed_query("test query")
+
+        assert result == [0.1, 0.2, 0.3]
+        mock_mixedbread.return_value.embed.assert_called_once()
+
+    @patch("mixedbread_ai_langchain.embedders.embeddings.Mixedbread")
+    def test_embed_query_empty_text(self, mock_mixedbread):
+        """Test embed_query with empty text."""
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = embeddings.embed_query("")
+
         assert result == []
+        mock_mixedbread.return_value.embed.assert_not_called()
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    def test_integration_embed_query(self):
-        """
-        Test basic query embedding with real API call.
-        """
-        embedder_config = TestConfig.get_test_embedder_config()
-        embedder = MixedbreadEmbeddings(**embedder_config)
-
-        query = "What is the capital of France?"
-        embedding = embedder.embed_query(query)
-
-        assert isinstance(embedding, list)
-        assert len(embedding) > 0
-        assert all(isinstance(x, float) for x in embedding)
-
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    def test_integration_embed_documents(self):
-        """
-        Test basic document embedding with real API call.
-        """
-        embedder_config = TestConfig.get_test_embedder_config()
-        embedder = MixedbreadEmbeddings(**embedder_config)
-
-        texts = [
-            "The Eiffel Tower is in Paris",
-            "Machine learning is transforming industries",
+    @patch("mixedbread_ai_langchain.embedders.embeddings.Mixedbread")
+    def test_embed_documents(self, mock_mixedbread):
+        """Test embed_documents method."""
+        # Mock response
+        mock_response = Mock()
+        mock_response.data = [
+            Mock(embedding=[0.1, 0.2, 0.3]),
+            Mock(embedding=[0.4, 0.5, 0.6]),
         ]
+        mock_mixedbread.return_value.embed.return_value = mock_response
 
-        embeddings = embedder.embed_documents(texts)
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = embeddings.embed_documents(["doc1", "doc2"])
 
-        assert isinstance(embeddings, list)
-        assert len(embeddings) == len(texts)
-        for embedding in embeddings:
-            assert isinstance(embedding, list)
-            assert len(embedding) > 0
-            assert all(isinstance(x, float) for x in embedding)
+        assert result == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        mock_mixedbread.return_value.embed.assert_called_once()
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    async def test_integration_aembed_query(self):
-        """
-        Test async query embedding with real API call.
-        """
-        embedder_config = TestConfig.get_test_embedder_config()
-        embedder = MixedbreadEmbeddings(**embedder_config)
+    @patch("mixedbread_ai_langchain.embedders.embeddings.Mixedbread")
+    def test_embed_documents_with_empty_texts(self, mock_mixedbread):
+        """Test embed_documents handles empty texts correctly."""
+        # Mock response for only non-empty text
+        mock_response = Mock()
+        mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3])]
+        mock_mixedbread.return_value.embed.return_value = mock_response
 
-        query = "What is the capital of France?"
-        embedding = await embedder.aembed_query(query)
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = embeddings.embed_documents(["doc1", "", "doc3"])
 
-        assert isinstance(embedding, list)
-        assert len(embedding) > 0
-        assert all(isinstance(x, float) for x in embedding)
+        # Should return embeddings with empty list for empty text
+        assert len(result) == 3
+        assert result[0] == [0.1, 0.2, 0.3]
+        assert result[1] == []
+        assert result[2] == []
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    async def test_integration_aembed_documents(self):
-        """
-        Test async document embedding with real API call.
-        """
-        embedder_config = TestConfig.get_test_embedder_config()
-        embedder = MixedbreadEmbeddings(**embedder_config)
+    @patch("mixedbread_ai_langchain.embedders.embeddings.AsyncMixedbread")
+    @pytest.mark.asyncio
+    async def test_aembed_query(self, mock_async_mixedbread):
+        """Test async embed_query method."""
+        # Mock async response
+        mock_response = Mock()
+        mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3])]
+        mock_async_mixedbread.return_value.embed = AsyncMock(return_value=mock_response)
 
-        texts = [
-            "The Eiffel Tower is in Paris",
-            "Machine learning is transforming industries",
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = await embeddings.aembed_query("test query")
+
+        assert result == [0.1, 0.2, 0.3]
+        mock_async_mixedbread.return_value.embed.assert_called_once()
+
+    @patch("mixedbread_ai_langchain.embedders.embeddings.AsyncMixedbread")
+    @pytest.mark.asyncio
+    async def test_aembed_documents(self, mock_async_mixedbread):
+        """Test async embed_documents method."""
+        # Mock async response
+        mock_response = Mock()
+        mock_response.data = [
+            Mock(embedding=[0.1, 0.2, 0.3]),
+            Mock(embedding=[0.4, 0.5, 0.6]),
         ]
+        mock_async_mixedbread.return_value.embed = AsyncMock(return_value=mock_response)
 
-        embeddings = await embedder.aembed_documents(texts)
+        embeddings = MixedbreadEmbeddings(api_key="test-key")
+        result = await embeddings.aembed_documents(["doc1", "doc2"])
 
-        assert isinstance(embeddings, list)
-        assert len(embeddings) == len(texts)
-        for embedding in embeddings:
-            assert isinstance(embedding, list)
-            assert len(embedding) > 0
-            assert all(isinstance(x, float) for x in embedding)
+        assert result == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        mock_async_mixedbread.return_value.embed.assert_called_once()

@@ -1,155 +1,224 @@
 import pytest
-from unittest.mock import Mock, patch
-from langchain_core.documents import Document
-from mixedbread_ai_langchain import MixedbreadDocumentLoader
-from .test_config import TestConfig
-import tempfile
-import os
-
-
-DEFAULT_VALUES = {
-    "chunking_strategy": "page",
-    "return_format": "markdown",
-    "element_types": ["text", "title", "list-item", "table"],
-    "max_wait_time": 300,
-    "poll_interval": 5,
-}
+from unittest.mock import Mock, patch, mock_open
+from pathlib import Path
+from mixedbread_ai_langchain.loaders.document_loaders import MixedbreadDocumentLoader
 
 
 class TestMixedbreadDocumentLoader:
-    def test_init_default(self, monkeypatch):
-        """
-        Test default initialization parameters for MixedbreadDocumentLoader.
-        """
-        monkeypatch.setenv("MXBAI_API_KEY", "fake-api-key")
-        loader = MixedbreadDocumentLoader("fake-file.pdf")
+    """Lean test suite for MixedbreadDocumentLoader."""
 
-        assert len(loader.file_paths) == 1
-        assert loader.file_paths[0].name == "fake-file.pdf"
-        assert loader.chunking_strategy == DEFAULT_VALUES["chunking_strategy"]
-        assert loader.return_format == DEFAULT_VALUES["return_format"]
-        assert loader.element_types == DEFAULT_VALUES["element_types"]
-        assert loader.max_wait_time == DEFAULT_VALUES["max_wait_time"]
-        assert loader.poll_interval == DEFAULT_VALUES["poll_interval"]
+    def test_init_default(self):
+        """Test initialization with default parameters."""
+        with patch.dict("os.environ", {"MXBAI_API_KEY": "test-key"}):
+            loader = MixedbreadDocumentLoader("test.pdf")
+            assert str(loader.file_path) == "test.pdf"
+            assert loader.chunking_strategy == "page"
+            assert loader.return_format == "markdown"
+            assert loader.max_wait_time == 300
+            assert loader.poll_interval == 5
 
     def test_init_with_parameters(self):
-        """
-        Test custom initialization parameters for MixedbreadDocumentLoader.
-        """
+        """Test initialization with custom parameters."""
         loader = MixedbreadDocumentLoader(
-            file_paths=["test.pdf", "test2.docx"],
-            api_key="test-api-key",
-            chunking_strategy="chunk",
+            file_path="document.pdf",
+            api_key="test-key",
+            chunking_strategy="paragraph",
             return_format="plain",
             element_types=["text"],
-            max_wait_time=120,
-            poll_interval=2,
+            max_wait_time=600,
+            poll_interval=10,
         )
-
-        assert len(loader.file_paths) == 2
-        assert loader.file_paths[0].name == "test.pdf"
-        assert loader.file_paths[1].name == "test2.docx"
-        assert loader.chunking_strategy == "chunk"
+        assert str(loader.file_path) == "document.pdf"
+        assert loader.chunking_strategy == "paragraph"
         assert loader.return_format == "plain"
         assert loader.element_types == ["text"]
-        assert loader.max_wait_time == 120
-        assert loader.poll_interval == 2
+        assert loader.max_wait_time == 600
+        assert loader.poll_interval == 10
 
-    def test_init_fail_wo_api_key(self, monkeypatch):
-        """
-        Test that initialization fails when no API key is provided.
-        """
-        monkeypatch.delenv("MXBAI_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="Mixedbread API key not found"):
-            MixedbreadDocumentLoader("fake-file.pdf")
+    def test_init_fail_without_api_key(self):
+        """Test initialization fails without API key."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="MXBAI_API_KEY"):
+                MixedbreadDocumentLoader("test.pdf")
 
-    @patch("mixedbread_ai_langchain.loaders.document_loaders.MixedbreadClient")
-    def test_upload_file_success(self, mock_client_class):
-        """
-        Test successful file upload.
-        """
-        # Create a temporary file for testing
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write("Test content")
-            temp_file = f.name
+    @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
+    @patch("pathlib.Path.exists")
+    @patch("builtins.open", new_callable=mock_open, read_data=b"fake pdf content")
+    def test_upload_file_success(self, mock_file, mock_exists, mock_mixedbread):
+        """Test successful file upload."""
+        mock_exists.return_value = True
+        mock_response = Mock()
+        mock_response.id = "file123"
+        mock_mixedbread.return_value.files.create.return_value = mock_response
 
-        try:
-            # Mock the client and response
-            mock_client = Mock()
-            mock_client_class.return_value = mock_client
-            mock_result = Mock()
-            mock_result.id = "test-file-id"
-            mock_client.client.files.create.return_value = mock_result
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        file_id = loader._upload_file()
 
-            loader = MixedbreadDocumentLoader(
-                file_paths=[temp_file], api_key="fake-api-key"
-            )
+        assert file_id == "file123"
+        mock_mixedbread.return_value.files.create.assert_called_once()
 
-            file_id = loader._upload_file(loader.file_paths[0])
-            assert file_id == "test-file-id"
-            mock_client.client.files.create.assert_called_once()
-        finally:
-            # Clean up the temporary file
-            os.unlink(temp_file)
+    @patch("pathlib.Path.exists")
+    def test_upload_file_not_found(self, mock_exists):
+        """Test file upload with missing file."""
+        mock_exists.return_value = False
+        
+        loader = MixedbreadDocumentLoader("missing.pdf", api_key="test-key")
+        
+        with pytest.raises(FileNotFoundError, match="File not found"):
+            loader._upload_file()
 
-    @patch("mixedbread_ai_langchain.loaders.document_loaders.MixedbreadClient")
-    def test_create_parsing_job_success(self, mock_client_class):
-        """
-        Test successful parsing job creation.
-        """
-        # Mock the client and response
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-        mock_result = Mock()
-        mock_result.id = "test-job-id"
-        mock_client.client.parsing.jobs.create.return_value = mock_result
+    @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
+    def test_create_parsing_job_success(self, mock_mixedbread):
+        """Test successful parsing job creation."""
+        mock_response = Mock()
+        mock_response.id = "job123"
+        mock_mixedbread.return_value.parsing.jobs.create.return_value = mock_response
 
-        loader = MixedbreadDocumentLoader(
-            file_paths=["test.pdf"], api_key="fake-api-key"
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        job_id = loader._create_parsing_job("file123")
+
+        assert job_id == "job123"
+        mock_mixedbread.return_value.parsing.jobs.create.assert_called_once_with(
+            file_id="file123",
+            chunking_strategy="page",
+            return_format="markdown",
+            element_types=["text", "title", "list-item", "table"],
         )
 
-        job_id = loader._create_parsing_job("test-file-id")
-        assert job_id == "test-job-id"
-        mock_client.client.parsing.jobs.create.assert_called_once()
+    @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
+    @patch("time.sleep")
+    def test_wait_for_completion_success(self, mock_sleep, mock_mixedbread):
+        """Test successful job completion waiting."""
+        # Mock completed job result
+        mock_result = Mock()
+        mock_result.status = "completed"
+        mock_result.model_dump.return_value = {"id": "job123", "status": "completed"}
+        mock_mixedbread.return_value.parsing.jobs.retrieve.return_value = mock_result
 
-    def test_load_with_empty_file_list(self):
-        """
-        Test load() with empty file list.
-        """
-        # This should work but return empty list since no files to process
-        loader = MixedbreadDocumentLoader(file_paths=[], api_key="fake-api-key")
-        documents = loader.load()
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        result = loader._wait_for_completion("job123")
+
+        assert result == {"id": "job123", "status": "completed"}
+        mock_mixedbread.return_value.parsing.jobs.retrieve.assert_called_with(job_id="job123")
+
+    @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
+    @patch("time.sleep")
+    def test_wait_for_completion_failed(self, mock_sleep, mock_mixedbread):
+        """Test job completion with failed status."""
+        mock_result = Mock()
+        mock_result.status = "failed"
+        mock_result.error = "Parsing error occurred"
+        mock_mixedbread.return_value.parsing.jobs.retrieve.return_value = mock_result
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        
+        with pytest.raises(RuntimeError, match="Parsing job failed: Parsing error occurred"):
+            loader._wait_for_completion("job123")
+
+    @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
+    @patch("time.sleep")
+    @patch("time.time")
+    def test_wait_for_completion_timeout(self, mock_time, mock_sleep, mock_mixedbread):
+        """Test job completion timeout."""
+        # Mock time progression to trigger timeout
+        mock_time.side_effect = [0, 301]  # Start time, then past max_wait_time
+        
+        mock_result = Mock()
+        mock_result.status = "pending"
+        mock_mixedbread.return_value.parsing.jobs.retrieve.return_value = mock_result
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        
+        with pytest.raises(TimeoutError, match="did not complete within 300 seconds"):
+            loader._wait_for_completion("job123")
+
+    def test_create_documents_success(self):
+        """Test successful document creation from parsing results."""
+        parsing_result = {
+            "id": "job123",
+            "result": {
+                "chunks": [
+                    {
+                        "content": "This is chunk 1",
+                        "elements": [{"page": 1}, {"page": 2}]
+                    },
+                    {
+                        "content": "This is chunk 2",
+                        "elements": [{"page": 2}]
+                    }
+                ]
+            }
+        }
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        documents = loader._create_documents(parsing_result)
+
+        assert len(documents) == 2
+        
+        # Check first document
+        assert documents[0].page_content == "This is chunk 1"
+        assert documents[0].metadata["source"] == "test.pdf"
+        assert documents[0].metadata["chunk_index"] == 0
+        assert documents[0].metadata["total_chunks"] == 2
+        assert documents[0].metadata["parsing_job_id"] == "job123"
+        assert documents[0].metadata["pages"] == [1, 2]
+        
+        # Check second document
+        assert documents[1].page_content == "This is chunk 2"
+        assert documents[1].metadata["chunk_index"] == 1
+        assert documents[1].metadata["pages"] == [2]
+
+    def test_create_documents_empty_result(self):
+        """Test document creation with empty parsing result."""
+        parsing_result = {"id": "job123", "result": {"chunks": []}}
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        documents = loader._create_documents(parsing_result)
+
         assert documents == []
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    def test_integration_upload_and_parse_file(self):
-        """
-        Test uploading and parsing a real file.
-        Note: This test requires a valid API key and will make real API calls.
-        """
-        # Create a temporary text file for testing
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write("This is a test document for parsing.\n\nIt has multiple lines.")
-            temp_file = f.name
+    @patch.object(MixedbreadDocumentLoader, "_upload_file")
+    @patch.object(MixedbreadDocumentLoader, "_create_parsing_job")
+    @patch.object(MixedbreadDocumentLoader, "_wait_for_completion")
+    @patch.object(MixedbreadDocumentLoader, "_create_documents")
+    def test_load_success(self, mock_create_docs, mock_wait, mock_create_job, mock_upload):
+        """Test successful complete loading workflow."""
+        # Mock the workflow steps
+        mock_upload.return_value = "file123"
+        mock_create_job.return_value = "job123"
+        mock_wait.return_value = {"id": "job123", "status": "completed"}
+        mock_create_docs.return_value = [Mock(page_content="Test content")]
 
-        try:
-            loader_config = TestConfig.get_test_document_loader_config()
-            loader = MixedbreadDocumentLoader(file_paths=[temp_file], **loader_config)
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        documents = loader.load()
 
-            # This test might take a while since it uploads, parses, and waits for completion
-            documents = loader.load()
+        assert len(documents) == 1
+        mock_upload.assert_called_once()
+        mock_create_job.assert_called_once_with("file123")
+        mock_wait.assert_called_once_with("job123")
 
-            # Basic assertions that work regardless of content
-            assert isinstance(documents, list)
-            for doc in documents:
-                assert isinstance(doc, Document)
-                assert hasattr(doc, "page_content")
-                assert hasattr(doc, "metadata")
-                assert isinstance(doc.metadata, dict)
-        finally:
-            # Clean up the temporary file
-            os.unlink(temp_file)
+    @patch.object(MixedbreadDocumentLoader, "_upload_file")
+    def test_load_error_handling(self, mock_upload):
+        """Test load method error handling."""
+        mock_upload.side_effect = Exception("Upload failed")
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        documents = loader.load()
+
+        assert len(documents) == 1
+        assert "Failed to parse test.pdf: Upload failed" in documents[0].page_content
+        assert documents[0].metadata["parsing_error"] is True
+        assert documents[0].metadata["error_message"] == "Upload failed"
+
+    @patch.object(MixedbreadDocumentLoader, "load")
+    def test_lazy_load(self, mock_load):
+        """Test lazy load method."""
+        mock_docs = [Mock(page_content="Doc 1"), Mock(page_content="Doc 2")]
+        mock_load.return_value = mock_docs
+
+        loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
+        lazy_docs = list(loader.lazy_load())
+
+        assert len(lazy_docs) == 2
+        assert lazy_docs == mock_docs
+        mock_load.assert_called_once()

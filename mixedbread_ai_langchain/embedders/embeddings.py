@@ -1,63 +1,27 @@
-from typing import List, Optional, Union, Dict, Any
-
+from typing import List, Optional, Union
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel, Field, SecretStr
-
-from mixedbread.types import EmbeddingCreateResponse
-from .types import MixedbreadEmbeddingType, EmbeddingMetadata
-from ..common.client import MixedbreadClient
-from ..common.mixins import SerializationMixin, AsyncMixin, ErrorHandlingMixin
-from ..common.utils import create_response_meta, create_empty_embedding_response
-from ..common.logging import get_logger
-
-logger = get_logger(__name__)
+from langchain_core.utils import get_from_dict_or_env
+from pydantic import SecretStr
+from mixedbread import Mixedbread, AsyncMixedbread
 
 
-class MixedbreadEmbeddings(
-    Embeddings, BaseModel, SerializationMixin, AsyncMixin, ErrorHandlingMixin
-):
+class MixedbreadEmbeddings(Embeddings):
     """
-    Mixedbread AI embeddings integration for LangChain.
+    Mixedbread embeddings integration for LangChain.
 
-    This class provides text embedding capabilities using the Mixedbread AI API,
-    integrating with LangChain's standard Embeddings interface with enhanced
-    async support, error handling, and metadata tracking.
+    Implementation that provides text embedding capabilities using the
+    Mixedbread API while following LangChain's standard Embeddings interface.
     """
-
-    model: str = Field(
-        default="mixedbread-ai/mxbai-embed-large-v1",
-        description="The Mixedbread model to use for embeddings",
-    )
-    normalized: bool = Field(
-        default=True, description="Whether to normalize the embeddings"
-    )
-    encoding_format: MixedbreadEmbeddingType = Field(
-        default=MixedbreadEmbeddingType.FLOAT, description="Format for the embeddings"
-    )
-    dimensions: Optional[int] = Field(
-        default=None, description="Target dimensions for the embeddings"
-    )
-    prompt: Optional[str] = Field(
-        default=None, description="Optional prompt to use for embeddings"
-    )
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def __init__(
         self,
         model: str = "mixedbread-ai/mxbai-embed-large-v1",
         api_key: Union[SecretStr, str, None] = None,
+        base_url: Optional[str] = None,
         normalized: bool = True,
-        encoding_format: Union[
-            str, MixedbreadEmbeddingType
-        ] = MixedbreadEmbeddingType.FLOAT,
+        encoding_format: str = "float",
         dimensions: Optional[int] = None,
         prompt: Optional[str] = None,
-        base_url: Optional[str] = None,
-        timeout: Optional[float] = 60.0,
-        max_retries: Optional[int] = 2,
-        **kwargs: Any,
     ):
         """
         Initialize the Mixedbread embeddings.
@@ -65,33 +29,34 @@ class MixedbreadEmbeddings(
         Args:
             model: The Mixedbread model to use for embeddings.
             api_key: API key for Mixedbread AI (or set MXBAI_API_KEY env var).
+            base_url: Base URL for the API.
             normalized: Whether to normalize the embeddings.
-            encoding_format: Format for the embeddings (float, float16, base64, binary, ubinary, int8, uint8).
+            encoding_format: Format for the embeddings.
             dimensions: Target dimensions for the embeddings.
             prompt: Optional prompt to use for embeddings.
-            base_url: Base URL for the API.
-            timeout: Request timeout in seconds.
-            max_retries: Maximum number of retries for failed requests.
-            **kwargs: Additional arguments passed to parent classes.
         """
-        if isinstance(encoding_format, str):
-            encoding_format = MixedbreadEmbeddingType.from_str(encoding_format)
+        if api_key is None:
+            api_key = get_from_dict_or_env({}, "api_key", "MXBAI_API_KEY")
 
-        super().__init__(
-            model=model,
-            normalized=normalized,
-            encoding_format=encoding_format,
-            dimensions=dimensions,
-            prompt=prompt,
-            **kwargs,
-        )
+        if isinstance(api_key, str):
+            api_key = SecretStr(api_key)
 
-        self._client = MixedbreadClient(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=max_retries,
-        )
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url
+        self.normalized = normalized
+        self.encoding_format = encoding_format
+        self.dimensions = dimensions
+        self.prompt = prompt
+
+        # Initialize clients
+        resolved_api_key = self.api_key.get_secret_value()
+        client_kwargs = {"api_key": resolved_api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+
+        self._client = Mixedbread(**client_kwargs)
+        self._async_client = AsyncMixedbread(**client_kwargs)
 
     def embed_query(self, text: str) -> List[float]:
         """
@@ -104,29 +69,18 @@ class MixedbreadEmbeddings(
             The embedding vector for the query.
         """
         if not text.strip():
-            logger.warning("Empty text provided for embedding")
             return []
 
-        try:
-            response: EmbeddingCreateResponse = self._client.client.embed(
-                model=self.model,
-                input=[text],
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
+        response = self._client.embed(
+            model=self.model,
+            input=[text],
+            normalized=self.normalized,
+            encoding_format=self.encoding_format,
+            dimensions=self.dimensions,
+            prompt=self.prompt,
+        )
 
-            embedding = response.data[0].embedding if response.data else []
-
-            # Log metadata for debugging
-            meta = create_response_meta(response, include_embedder_fields=True)
-            logger.debug(f"Query embedding completed: {meta}")
-
-            return embedding
-
-        except Exception as e:
-            return self._handle_api_error(e, "query embedding", [])
+        return response.data[0].embedding if response.data else []
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
@@ -139,7 +93,6 @@ class MixedbreadEmbeddings(
             List of embedding vectors, one for each document.
         """
         if not texts:
-            logger.info("Empty text list provided for embedding")
             return []
 
         # Filter out empty texts but maintain positions
@@ -151,37 +104,26 @@ class MixedbreadEmbeddings(
                 text_positions.append(i)
 
         if not non_empty_texts:
-            logger.warning("All provided texts are empty")
             return [[] for _ in texts]
 
-        try:
-            response: EmbeddingCreateResponse = self._client.client.embed(
-                model=self.model,
-                input=non_empty_texts,
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
+        response = self._client.embed(
+            model=self.model,
+            input=non_empty_texts,
+            normalized=self.normalized,
+            encoding_format=self.encoding_format,
+            dimensions=self.dimensions,
+            prompt=self.prompt,
+        )
 
-            embeddings = (
-                [item.embedding for item in response.data] if response.data else []
-            )
+        embeddings = [item.embedding for item in response.data] if response.data else []
 
-            # Reconstruct full results with empty embeddings for empty texts
-            full_results = [[] for _ in texts]
-            for i, embedding in enumerate(embeddings):
-                if i < len(text_positions):
-                    full_results[text_positions[i]] = embedding
+        # Reconstruct full results with empty embeddings for empty texts
+        full_results = [[] for _ in texts]
+        for i, embedding in enumerate(embeddings):
+            if i < len(text_positions):
+                full_results[text_positions[i]] = embedding
 
-            # Log metadata for debugging
-            meta = create_response_meta(response, include_embedder_fields=True)
-            logger.debug(f"Document embedding completed: {meta}")
-
-            return full_results
-
-        except Exception as e:
-            return self._handle_api_error(e, "document embedding", [[] for _ in texts])
+        return full_results
 
     async def aembed_query(self, text: str) -> List[float]:
         """
@@ -194,29 +136,18 @@ class MixedbreadEmbeddings(
             The embedding vector for the query.
         """
         if not text.strip():
-            logger.warning("Empty text provided for async embedding")
             return []
 
-        try:
-            response: EmbeddingCreateResponse = await self._client.async_client.embed(
-                model=self.model,
-                input=[text],
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
+        response = await self._async_client.embed(
+            model=self.model,
+            input=[text],
+            normalized=self.normalized,
+            encoding_format=self.encoding_format,
+            dimensions=self.dimensions,
+            prompt=self.prompt,
+        )
 
-            embedding = response.data[0].embedding if response.data else []
-
-            # Log metadata for debugging
-            meta = create_response_meta(response, include_embedder_fields=True)
-            logger.debug(f"Async query embedding completed: {meta}")
-
-            return embedding
-
-        except Exception as e:
-            return self._handle_api_error(e, "async query embedding", [])
+        return response.data[0].embedding if response.data else []
 
     async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
         """
@@ -229,7 +160,6 @@ class MixedbreadEmbeddings(
             List of embedding vectors, one for each document.
         """
         if not texts:
-            logger.info("Empty text list provided for async embedding")
             return []
 
         # Filter out empty texts but maintain positions
@@ -241,102 +171,23 @@ class MixedbreadEmbeddings(
                 text_positions.append(i)
 
         if not non_empty_texts:
-            logger.warning("All provided texts are empty")
             return [[] for _ in texts]
 
-        try:
-            response: EmbeddingCreateResponse = await self._client.async_client.embed(
-                model=self.model,
-                input=non_empty_texts,
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
+        response = await self._async_client.embed(
+            model=self.model,
+            input=non_empty_texts,
+            normalized=self.normalized,
+            encoding_format=self.encoding_format,
+            dimensions=self.dimensions,
+            prompt=self.prompt,
+        )
 
-            embeddings = (
-                [item.embedding for item in response.data] if response.data else []
-            )
+        embeddings = [item.embedding for item in response.data] if response.data else []
 
-            # Reconstruct full results with empty embeddings for empty texts
-            full_results = [[] for _ in texts]
-            for i, embedding in enumerate(embeddings):
-                if i < len(text_positions):
-                    full_results[text_positions[i]] = embedding
+        # Reconstruct full results with empty embeddings for empty texts
+        full_results = [[] for _ in texts]
+        for i, embedding in enumerate(embeddings):
+            if i < len(text_positions):
+                full_results[text_positions[i]] = embedding
 
-            # Log metadata for debugging
-            meta = create_response_meta(response, include_embedder_fields=True)
-            logger.debug(f"Async document embedding completed: {meta}")
-
-            return full_results
-
-        except Exception as e:
-            return self._handle_api_error(
-                e, "async document embedding", [[] for _ in texts]
-            )
-
-    def embed_with_metadata(self, text: str) -> Dict[str, Any]:
-        """
-        Embed a single text and return both embedding and metadata.
-
-        Args:
-            text: The text to embed.
-
-        Returns:
-            Dictionary containing embedding and metadata.
-        """
-        if not text.strip():
-            logger.warning("Empty text provided for embedding with metadata")
-            return create_empty_embedding_response(self.model)
-
-        try:
-            response: EmbeddingCreateResponse = self._client.client.embed(
-                model=self.model,
-                input=[text],
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
-
-            embedding = response.data[0].embedding if response.data else []
-            meta = create_response_meta(response, include_embedder_fields=True)
-
-            return {"embedding": embedding, "meta": meta}
-
-        except Exception as e:
-            logger.error(f"Error during embedding with metadata: {str(e)}")
-            raise
-
-    async def aembed_with_metadata(self, text: str) -> Dict[str, Any]:
-        """
-        Async version of embed_with_metadata.
-
-        Args:
-            text: The text to embed.
-
-        Returns:
-            Dictionary containing embedding and metadata.
-        """
-        if not text.strip():
-            logger.warning("Empty text provided for async embedding with metadata")
-            return create_empty_embedding_response(self.model)
-
-        try:
-            response: EmbeddingCreateResponse = await self._client.async_client.embed(
-                model=self.model,
-                input=[text],
-                normalized=self.normalized,
-                encoding_format=self.encoding_format.value,
-                dimensions=self.dimensions,
-                prompt=self.prompt,
-            )
-
-            embedding = response.data[0].embedding if response.data else []
-            meta = create_response_meta(response, include_embedder_fields=True)
-
-            return {"embedding": embedding, "meta": meta}
-
-        except Exception as e:
-            logger.error(f"Error during async embedding with metadata: {str(e)}")
-            raise
+        return full_results

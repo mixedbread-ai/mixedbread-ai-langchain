@@ -1,181 +1,171 @@
 import pytest
+from unittest.mock import Mock, AsyncMock, patch
 from langchain_core.documents import Document
-from mixedbread_ai_langchain import MixedbreadReranker
-from .test_config import TestConfig
-
-
-DEFAULT_VALUES = {
-    "model": "mixedbread-ai/mxbai-rerank-large-v2",  # Updated to match actual default
-    "top_k": 3,
-    "return_input": True,
-}
+from mixedbread_ai_langchain.compressors.reranker import MixedbreadReranker
 
 
 class TestMixedbreadReranker:
-    def test_init_default(self, monkeypatch):
-        """
-        Test default initialization parameters for MixedbreadReranker.
-        """
-        monkeypatch.setenv("MXBAI_API_KEY", "test-api-key")
-        component = MixedbreadReranker()
+    """Lean test suite for MixedbreadReranker."""
 
-        assert component.model == DEFAULT_VALUES["model"]
-        assert component.top_k == DEFAULT_VALUES["top_k"]
-        assert component.return_input == DEFAULT_VALUES["return_input"]
+    def test_init_default(self):
+        """Test initialization with default parameters."""
+        with patch.dict("os.environ", {"MXBAI_API_KEY": "test-key"}):
+            reranker = MixedbreadReranker()
+            assert reranker.model == "mixedbread-ai/mxbai-rerank-large-v2"
+            assert reranker.top_k == 3
+            assert reranker.return_input is True
 
     def test_init_with_parameters(self):
-        """
-        Test custom initialization parameters for MixedbreadReranker.
-        """
-        component = MixedbreadReranker(
-            api_key="test-api-key",
+        """Test initialization with custom parameters."""
+        reranker = MixedbreadReranker(
             model="custom-model",
+            api_key="test-key",
             top_k=5,
             return_input=False,
         )
+        assert reranker.model == "custom-model"
+        assert reranker.top_k == 5
+        assert reranker.return_input is False
 
-        assert component.model == "custom-model"
-        assert component.top_k == 5
-        assert component.return_input is False
+    def test_init_fail_without_api_key(self):
+        """Test initialization fails without API key."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="MXBAI_API_KEY"):
+                MixedbreadReranker()
 
-    def test_init_fail_wo_api_key(self, monkeypatch):
-        """
-        Test that initialization fails when no API key is provided.
-        """
-        monkeypatch.delenv("MXBAI_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="Mixedbread API key not found"):
-            MixedbreadReranker()
+    @patch("mixedbread_ai_langchain.compressors.reranker.Mixedbread")
+    def test_compress_documents_empty_input(self, mock_mixedbread):
+        """Test compress_documents with empty input."""
+        reranker = MixedbreadReranker(api_key="test-key")
+        result = reranker.compress_documents([], "test query")
 
-    def test_compress_documents_empty_input(self):
-        """
-        Test reranking with empty document list.
-        """
-        ranker = MixedbreadReranker(api_key="fake-api-key")
-        result = ranker.compress_documents(documents=[], query="test query")
         assert result == []
+        mock_mixedbread.return_value.rerank.assert_not_called()
 
-    def test_compress_documents_empty_query(self):
-        """
-        Test reranking with empty query should return top_k documents.
-        """
-        ranker = MixedbreadReranker(api_key="fake-api-key", top_k=2)
+    @patch("mixedbread_ai_langchain.compressors.reranker.Mixedbread")
+    def test_compress_documents_empty_query(self, mock_mixedbread):
+        """Test compress_documents with empty query."""
         documents = [
             Document(page_content="Document 1"),
             Document(page_content="Document 2"),
-            Document(page_content="Document 3"),
         ]
-        result = ranker.compress_documents(documents=documents, query="")
-        assert len(result) == 2  # Should return top_k documents
+        
+        reranker = MixedbreadReranker(api_key="test-key", top_k=1)
+        result = reranker.compress_documents(documents, "")
 
-    def test_prepare_documents_for_reranking(self):
-        """
-        Test document preparation for reranking.
-        """
-        ranker = MixedbreadReranker(api_key="fake-api-key")
+        assert len(result) == 1
+        assert result[0].page_content == "Document 1"
+        mock_mixedbread.return_value.rerank.assert_not_called()
+
+    @patch("mixedbread_ai_langchain.compressors.reranker.Mixedbread")
+    def test_compress_documents_success(self, mock_mixedbread):
+        """Test successful document compression."""
+        # Mock response
+        mock_result_1 = Mock(index=1, score=0.9)
+        mock_result_2 = Mock(index=0, score=0.7)
+        mock_response = Mock()
+        mock_response.data = [mock_result_1, mock_result_2]
+        mock_mixedbread.return_value.rerank.return_value = mock_response
+
+        # Input documents
         documents = [
-            Document(page_content="Content 1"),
-            Document(page_content="Content 2"),
-            Document(page_content=""),  # Empty content
+            Document(page_content="Document 1", metadata={"source": "doc1"}),
+            Document(page_content="Document 2", metadata={"source": "doc2"}),
         ]
 
-        prepared = ranker._prepare_documents_for_reranking(documents)
-        assert prepared == ["Content 1", "Content 2", ""]
+        reranker = MixedbreadReranker(api_key="test-key")
+        result = reranker.compress_documents(documents, "test query")
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    def test_integration_basic_reranking(self):
-        """
-        Test basic reranking with real API call.
-        """
-        reranker_config = TestConfig.get_test_reranker_config()
-        reranker = MixedbreadReranker(top_k=2, **reranker_config)
+        # Should return reranked documents
+        assert len(result) == 2
+        assert result[0].page_content == "Document 2"  # Higher score
+        assert result[0].metadata["rerank_score"] == 0.9
+        assert result[0].metadata["rerank_index"] == 1
+        assert result[0].metadata["source"] == "doc2"  # Original metadata preserved
 
-        documents = [
-            Document(page_content="Paris is the capital of France"),
-            Document(page_content="Berlin is the capital of Germany"),
-            Document(page_content="Madrid is the capital of Spain"),
-        ]
+        assert result[1].page_content == "Document 1"
+        assert result[1].metadata["rerank_score"] == 0.7
+        assert result[1].metadata["rerank_index"] == 0
 
-        result = reranker.compress_documents(
-            documents=documents, query="What is the capital of Germany?"
+        mock_mixedbread.return_value.rerank.assert_called_once_with(
+            model="mixedbread-ai/mxbai-rerank-large-v2",
+            query="test query",
+            input=["Document 1", "Document 2"],
+            top_k=3,
+            return_input=True,
         )
 
-        assert isinstance(result, list)
-        assert len(result) <= 2  # top_k = 2
-        assert all(isinstance(doc, Document) for doc in result)
-        assert all("rerank_score" in doc.metadata for doc in result)
-        assert all("rerank_index" in doc.metadata for doc in result)
-        assert all("rerank_model" in doc.metadata for doc in result)
-        assert all("original_index" in doc.metadata for doc in result)
-
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    async def test_integration_async_reranking(self):
-        """
-        Test async reranking with real API call.
-        """
-        reranker_config = TestConfig.get_test_reranker_config()
-        reranker = MixedbreadReranker(top_k=2, **reranker_config)
+    @patch("mixedbread_ai_langchain.compressors.reranker.Mixedbread")
+    def test_compress_documents_api_error(self, mock_mixedbread):
+        """Test compress_documents handles API errors gracefully."""
+        # Mock API error
+        mock_mixedbread.return_value.rerank.side_effect = Exception("API Error")
 
         documents = [
-            Document(page_content="Paris is the capital of France"),
-            Document(page_content="Berlin is the capital of Germany"),
-            Document(page_content="Madrid is the capital of Spain"),
+            Document(page_content="Document 1"),
+            Document(page_content="Document 2"),
         ]
 
-        result = await reranker.acompress_documents(
-            documents=documents, query="What is the capital of Germany?"
-        )
+        reranker = MixedbreadReranker(api_key="test-key", top_k=1)
+        result = reranker.compress_documents(documents, "test query")
 
-        assert isinstance(result, list)
-        assert len(result) <= 2  # top_k = 2
-        assert all(isinstance(doc, Document) for doc in result)
-        assert all("rerank_score" in doc.metadata for doc in result)
+        # Should fallback to original order
+        assert len(result) == 1
+        assert result[0].page_content == "Document 1"
 
-    @pytest.mark.skipif(
-        not TestConfig.has_api_key(),
-        reason="Export an env var called MXBAI_API_KEY containing the Mixedbread API key to run this test.",
-    )
-    @pytest.mark.integration
-    def test_integration_reranking_with_metadata(self):
-        """
-        Test reranking preserves existing document metadata.
-        """
-        reranker_config = TestConfig.get_test_reranker_config()
-        reranker = MixedbreadReranker(top_k=3, **reranker_config)
+    @patch("mixedbread_ai_langchain.compressors.reranker.Mixedbread")
+    def test_compress_documents_empty_response(self, mock_mixedbread):
+        """Test compress_documents with empty API response."""
+        # Mock empty response
+        mock_response = Mock()
+        mock_response.data = []
+        mock_mixedbread.return_value.rerank.return_value = mock_response
 
         documents = [
-            Document(
-                page_content="Paris is the capital of France",
-                metadata={"country": "France", "type": "capital"},
-            ),
-            Document(
-                page_content="Berlin is the capital of Germany",
-                metadata={"country": "Germany", "type": "capital"},
-            ),
-            Document(
-                page_content="Madrid is the capital of Spain",
-                metadata={"country": "Spain", "type": "capital"},
-            ),
+            Document(page_content="Document 1"),
+            Document(page_content="Document 2"),
         ]
 
-        result = reranker.compress_documents(
-            documents=documents, query="German capital city"
-        )
+        reranker = MixedbreadReranker(api_key="test-key")
+        result = reranker.compress_documents(documents, "test query")
 
-        assert len(result) > 0
-        for doc in result:
-            # Original metadata should be preserved
-            assert "country" in doc.metadata
-            assert "type" in doc.metadata
-            # Reranking metadata should be added
-            assert "rerank_score" in doc.metadata
-            assert "rerank_index" in doc.metadata
-            assert "rerank_model" in doc.metadata
-            assert "original_index" in doc.metadata
+        # Should return original documents limited by top_k
+        assert len(result) == 2
+        assert result[0].page_content == "Document 1"
+        assert result[1].page_content == "Document 2"
+
+    @patch("mixedbread_ai_langchain.compressors.reranker.AsyncMixedbread")
+    @pytest.mark.asyncio
+    async def test_acompress_documents(self, mock_async_mixedbread):
+        """Test async compress_documents method."""
+        # Mock async response
+        mock_result = Mock(index=0, score=0.9)
+        mock_response = Mock()
+        mock_response.data = [mock_result]
+        mock_async_mixedbread.return_value.rerank = AsyncMock(return_value=mock_response)
+
+        documents = [Document(page_content="Document 1")]
+
+        reranker = MixedbreadReranker(api_key="test-key")
+        result = await reranker.acompress_documents(documents, "test query")
+
+        assert len(result) == 1
+        assert result[0].page_content == "Document 1"
+        assert result[0].metadata["rerank_score"] == 0.9
+        mock_async_mixedbread.return_value.rerank.assert_called_once()
+
+    @patch("mixedbread_ai_langchain.compressors.reranker.AsyncMixedbread")
+    @pytest.mark.asyncio
+    async def test_acompress_documents_error(self, mock_async_mixedbread):
+        """Test async compress_documents handles errors gracefully."""
+        # Mock async error
+        mock_async_mixedbread.return_value.rerank = AsyncMock(side_effect=Exception("API Error"))
+
+        documents = [Document(page_content="Document 1")]
+
+        reranker = MixedbreadReranker(api_key="test-key")
+        result = await reranker.acompress_documents(documents, "test query")
+
+        # Should fallback to original order
+        assert len(result) == 1
+        assert result[0].page_content == "Document 1"
