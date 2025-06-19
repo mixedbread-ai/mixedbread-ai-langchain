@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import Mock, patch, mock_open
-from pathlib import Path
 from mixedbread_ai_langchain.loaders.document_loaders import MixedbreadDocumentLoader
 
 
@@ -61,9 +60,9 @@ class TestMixedbreadDocumentLoader:
     def test_upload_file_not_found(self, mock_exists):
         """Test file upload with missing file."""
         mock_exists.return_value = False
-        
+
         loader = MixedbreadDocumentLoader("missing.pdf", api_key="test-key")
-        
+
         with pytest.raises(FileNotFoundError, match="File not found"):
             loader._upload_file()
 
@@ -99,7 +98,9 @@ class TestMixedbreadDocumentLoader:
         result = loader._wait_for_completion("job123")
 
         assert result == {"id": "job123", "status": "completed"}
-        mock_mixedbread.return_value.parsing.jobs.retrieve.assert_called_with(job_id="job123")
+        mock_mixedbread.return_value.parsing.jobs.retrieve.assert_called_with(
+            job_id="job123"
+        )
 
     @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
     @patch("time.sleep")
@@ -111,8 +112,10 @@ class TestMixedbreadDocumentLoader:
         mock_mixedbread.return_value.parsing.jobs.retrieve.return_value = mock_result
 
         loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
-        
-        with pytest.raises(RuntimeError, match="Parsing job failed: Parsing error occurred"):
+
+        with pytest.raises(
+            RuntimeError, match="Parsing job failed: Parsing error occurred"
+        ):
             loader._wait_for_completion("job123")
 
     @patch("mixedbread_ai_langchain.loaders.document_loaders.Mixedbread")
@@ -122,13 +125,13 @@ class TestMixedbreadDocumentLoader:
         """Test job completion timeout."""
         # Mock time progression to trigger timeout
         mock_time.side_effect = [0, 301]  # Start time, then past max_wait_time
-        
+
         mock_result = Mock()
         mock_result.status = "pending"
         mock_mixedbread.return_value.parsing.jobs.retrieve.return_value = mock_result
 
         loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
-        
+
         with pytest.raises(TimeoutError, match="did not complete within 300 seconds"):
             loader._wait_for_completion("job123")
 
@@ -140,21 +143,18 @@ class TestMixedbreadDocumentLoader:
                 "chunks": [
                     {
                         "content": "This is chunk 1",
-                        "elements": [{"page": 1}, {"page": 2}]
+                        "elements": [{"page": 1}, {"page": 2}],
                     },
-                    {
-                        "content": "This is chunk 2",
-                        "elements": [{"page": 2}]
-                    }
+                    {"content": "This is chunk 2", "elements": [{"page": 2}]},
                 ]
-            }
+            },
         }
 
         loader = MixedbreadDocumentLoader("test.pdf", api_key="test-key")
         documents = loader._create_documents(parsing_result)
 
         assert len(documents) == 2
-        
+
         # Check first document
         assert documents[0].page_content == "This is chunk 1"
         assert documents[0].metadata["source"] == "test.pdf"
@@ -162,7 +162,7 @@ class TestMixedbreadDocumentLoader:
         assert documents[0].metadata["total_chunks"] == 2
         assert documents[0].metadata["parsing_job_id"] == "job123"
         assert documents[0].metadata["pages"] == [1, 2]
-        
+
         # Check second document
         assert documents[1].page_content == "This is chunk 2"
         assert documents[1].metadata["chunk_index"] == 1
@@ -181,7 +181,9 @@ class TestMixedbreadDocumentLoader:
     @patch.object(MixedbreadDocumentLoader, "_create_parsing_job")
     @patch.object(MixedbreadDocumentLoader, "_wait_for_completion")
     @patch.object(MixedbreadDocumentLoader, "_create_documents")
-    def test_load_success(self, mock_create_docs, mock_wait, mock_create_job, mock_upload):
+    def test_load_success(
+        self, mock_create_docs, mock_wait, mock_create_job, mock_upload
+    ):
         """Test successful complete loading workflow."""
         # Mock the workflow steps
         mock_upload.return_value = "file123"
