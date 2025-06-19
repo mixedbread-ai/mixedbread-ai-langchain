@@ -1,7 +1,5 @@
 import asyncio
-from mixedbread_ai_langchain.retrievers.vector_store_retriever import (
-    MixedbreadVectorStoreRetriever,
-)
+from mixedbread_ai_langchain import MixedbreadVectorStoreRetriever
 
 
 def chunk_search_example():

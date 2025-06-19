@@ -1,5 +1,5 @@
 import asyncio
-from mixedbread_ai_langchain.embedders.embeddings import MixedbreadEmbeddings
+from mixedbread_ai_langchain import MixedbreadEmbeddings
 
 
 def basic_usage():

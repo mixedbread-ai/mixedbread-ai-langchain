@@ -1,6 +1,6 @@
 import asyncio
 from langchain_core.documents import Document
-from mixedbread_ai_langchain.compressors.reranker import MixedbreadReranker
+from mixedbread_ai_langchain import MixedbreadReranker
 
 
 def basic_usage():

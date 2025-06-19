@@ -1,4 +1,4 @@
-from mixedbread_ai_langchain.loaders.document_loaders import MixedbreadDocumentLoader
+from mixedbread_ai_langchain import MixedbreadDocumentLoader
 
 
 def basic_usage():
