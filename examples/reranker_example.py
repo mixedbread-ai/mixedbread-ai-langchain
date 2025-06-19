@@ -1,7 +1,3 @@
-"""
-Example demonstrating MixedbreadReranker usage.
-"""
-
 import asyncio
 from langchain_core.documents import Document
 from mixedbread_ai_langchain.compressors.reranker import MixedbreadReranker

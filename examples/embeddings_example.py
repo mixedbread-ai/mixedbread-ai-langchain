@@ -1,7 +1,3 @@
-"""
-Example demonstrating MixedbreadEmbeddings usage.
-"""
-
 import asyncio
 from mixedbread_ai_langchain.embedders.embeddings import MixedbreadEmbeddings
 

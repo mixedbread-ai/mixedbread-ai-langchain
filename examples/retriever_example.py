@@ -1,7 +1,3 @@
-"""
-Example demonstrating MixedbreadVectorStoreRetriever usage.
-"""
-
 import asyncio
 from mixedbread_ai_langchain.retrievers.vector_store_retriever import (
     MixedbreadVectorStoreRetriever,
@@ -14,7 +10,7 @@ def chunk_search_example():
 
     # Initialize retriever for chunk-level search
     retriever = MixedbreadVectorStoreRetriever(
-        vector_store_identifiers=["9daea3ae-b451-412c-af1f-da0712f32cb5"],
+        vector_store_identifiers=["your-vector-store-id"],
         search_type="chunk",  # Default - searches individual chunks
         top_k=5,
         # api_key="your-api-key"  # or set MXBAI_API_KEY env var
@@ -42,7 +38,7 @@ def file_search_example():
 
     # Initialize retriever for file-level search
     retriever = MixedbreadVectorStoreRetriever(
-        vector_store_identifiers=["9daea3ae-b451-412c-af1f-da0712f32cb5"],
+        vector_store_identifiers=["your-vector-store-id"],
         search_type="file",  # Searches files and aggregates chunk content
         top_k=3,
     )
@@ -72,8 +68,8 @@ async def async_search_example():
     # Initialize retriever
     retriever = MixedbreadVectorStoreRetriever(
         vector_store_identifiers=[
-            "9daea3ae-b451-412c-af1f-da0712f32cb5",
-            "4107dac2-cfe7-494c-9ec6-c3581a6c8cc1",
+            "your-vector-store-id",
+            "your-vector-store-id",
         ],  # Multiple stores
         search_type="chunk",
         top_k=4,
@@ -100,9 +96,8 @@ def multiple_stores_example():
     # Search across multiple vector stores
     retriever = MixedbreadVectorStoreRetriever(
         vector_store_identifiers=[
-            "research-papers-store",
-            "documentation-store",
-            "articles-store",
+            "your-vector-store-id",
+            "your-vector-store-id",
         ],
         search_type="chunk",
         top_k=6,  # Get 6 results total across all stores
