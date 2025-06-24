@@ -5,21 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mixedbread-ai-langchain"
 version = "1.0.0"
-description = "Mixedbread AI integration for LangChain, providing embedding, document loading, parsing, reranking, and retrieval components."
+description = "The official Mixedbread AI integration for LangChain."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 keywords = ["langchain", "mixedbread-ai", "embedding", "reranking", "document-loader", "document-parser", "retrieval", "nlp", "llm", "rag"]
 authors = [{ name = "Mixedbread AI", email = "support@mixedbread.com" }]
 classifiers = [
-    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
 dependencies = [
     "langchain-core>=0.3.61",
@@ -40,7 +40,8 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["mixedbread_ai_langchain"]
+packages = {find = {}}
+package-data = {"mixedbread_ai_langchain" = ["py.typed"]}
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -3,14 +3,14 @@
 [![PyPI version](https://badge.fury.io/py/mixedbread-ai-langchain.svg)](https://badge.fury.io/py/mixedbread-ai-langchain)
 [![Python versions](https://img.shields.io/pypi/pyversions/mixedbread-ai-langchain.svg)](https://pypi.org/project/mixedbread-ai-langchain/)
 
-**Mixedbread AI** integration for **Langchain**, providing state-of-the-art embedding, reranking, document parsing, and retrieval capabilities.
+**Mixedbread AI** integration for **LangChain**, transforming how you build AI-native search applications. This package provides seamless access to Mixedbread's multimodal AI capabilities, enabling intelligent search that understands meaning across text, images, code, PDFs, and diverse document types.
 
 ## Components
 
-- **MixedbreadEmbeddings** - Text embeddings with async support
-- **MixedbreadReranker** - Document reranking for improved relevance
-- **MixedbreadDocumentLoader** - Multi-format document parsing and loading
-- **MixedbreadVectorStoreRetriever** - Vector store search and retrieval
+- **MixedbreadEmbeddings** - State-of-the-art embedding models that generate vectors capturing deep contextual meaning, with full async support and batch processing capabilities for transforming unstructured data into intelligent search
+- **MixedbreadReranker** - Powerful semantic reranking that significantly boosts search relevance by applying sophisticated models to reorder initial search results, essential for optimizing RAG applications and improving precision
+- **MixedbreadDocumentLoader** - Layout-aware document parsing supporting PDF, PPTX, HTML and more formats, providing structured output with detailed content elements for high-quality downstream processing
+- **MixedbreadVectorStoreRetriever** - AI-native search engine that enables conversational queries across multimodal data, supporting millions of documents with natural language understanding across multiple languages.
 
 ## Installation
 
