@@ -58,6 +58,42 @@ class MixedbreadEmbeddings(Embeddings):
         self._client = Mixedbread(**client_kwargs)
         self._async_client = AsyncMixedbread(**client_kwargs)
 
+    def _filter_empty_texts(self, texts: List[str]) -> tuple[List[str], List[int]]:
+        """
+        Filter out empty texts but maintain positions.
+        
+        Args:
+            texts: List of texts to filter
+            
+        Returns:
+            Tuple of (non_empty_texts, text_positions)
+        """
+        non_empty_texts = []
+        text_positions = []
+        for i, text in enumerate(texts):
+            if text.strip():
+                non_empty_texts.append(text)
+                text_positions.append(i)
+        return non_empty_texts, text_positions
+    
+    def _reconstruct_results(self, embeddings: List[List[float]], text_positions: List[int], total_texts: int) -> List[List[float]]:
+        """
+        Reconstruct full results with empty embeddings for empty texts.
+        
+        Args:
+            embeddings: List of embeddings from API
+            text_positions: Original positions of non-empty texts
+            total_texts: Total number of original texts
+            
+        Returns:
+            Full results list with empty lists for empty texts
+        """
+        full_results = [[] for _ in range(total_texts)]
+        for i, embedding in enumerate(embeddings):
+            if i < len(text_positions):
+                full_results[text_positions[i]] = embedding
+        return full_results
+
     def embed_query(self, text: str) -> List[float]:
         """
         Embed a single query text.
@@ -95,13 +131,7 @@ class MixedbreadEmbeddings(Embeddings):
         if not texts:
             return []
 
-        # Filter out empty texts but maintain positions
-        non_empty_texts = []
-        text_positions = []
-        for i, text in enumerate(texts):
-            if text.strip():
-                non_empty_texts.append(text)
-                text_positions.append(i)
+        non_empty_texts, text_positions = self._filter_empty_texts(texts)
 
         if not non_empty_texts:
             return [[] for _ in texts]
@@ -117,13 +147,7 @@ class MixedbreadEmbeddings(Embeddings):
 
         embeddings = [item.embedding for item in response.data] if response.data else []
 
-        # Reconstruct full results with empty embeddings for empty texts
-        full_results = [[] for _ in texts]
-        for i, embedding in enumerate(embeddings):
-            if i < len(text_positions):
-                full_results[text_positions[i]] = embedding
-
-        return full_results
+        return self._reconstruct_results(embeddings, text_positions, len(texts))
 
     async def aembed_query(self, text: str) -> List[float]:
         """
@@ -162,13 +186,7 @@ class MixedbreadEmbeddings(Embeddings):
         if not texts:
             return []
 
-        # Filter out empty texts but maintain positions
-        non_empty_texts = []
-        text_positions = []
-        for i, text in enumerate(texts):
-            if text.strip():
-                non_empty_texts.append(text)
-                text_positions.append(i)
+        non_empty_texts, text_positions = self._filter_empty_texts(texts)
 
         if not non_empty_texts:
             return [[] for _ in texts]
@@ -184,10 +202,4 @@ class MixedbreadEmbeddings(Embeddings):
 
         embeddings = [item.embedding for item in response.data] if response.data else []
 
-        # Reconstruct full results with empty embeddings for empty texts
-        full_results = [[] for _ in texts]
-        for i, embedding in enumerate(embeddings):
-            if i < len(text_positions):
-                full_results[text_positions[i]] = embedding
-
-        return full_results
+        return self._reconstruct_results(embeddings, text_positions, len(texts))
