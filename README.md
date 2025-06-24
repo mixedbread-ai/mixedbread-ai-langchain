@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/mixedbread-ai-langchain.svg)](https://badge.fury.io/py/mixedbread-ai-langchain)
 [![Python versions](https://img.shields.io/pypi/pyversions/mixedbread-ai-langchain.svg)](https://pypi.org/project/mixedbread-ai-langchain/)
 
-**Mixedbread AI** integration for **LangChain**, transforming how you build AI-native search applications. This package provides seamless access to Mixedbread's multimodal AI capabilities, enabling intelligent search that understands meaning across text, images, code, PDFs, and diverse document types.
+**Mixedbread AI** integration for **LangChain**. This package provides seamless access to Mixedbread's multimodal AI capabilities, enabling intelligent search that understands meaning across text, images, code, PDFs, and diverse document types. Use our state of the art embedding and reranking models as part of your langchain workflows.
 
 ## Components
 
