@@ -40,13 +40,13 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run unit tests
-        run: python run_tests.py unit
+        run: pytest -m "not integration" -v
 
       - name: Run integration tests
         if: github.event_name == 'release'
         env:
           MXBAI_API_KEY: ${{ secrets.MXBAI_API_KEY }}
-        run: python run_tests.py integration
+        run: pytest -m "integration" -v
 
   build:
     runs-on: ubuntu-latest
