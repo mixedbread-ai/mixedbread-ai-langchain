@@ -66,10 +66,16 @@ See the [`examples/`](./examples/) directory for complete usage examples:
 pip install -e ".[dev]"
 
 # Run all tests
-pytest tests/
+python run_tests.py all
+
+# Run unit tests only (no API key required)
+python run_tests.py unit
+
+# Run integration tests (requires API key)
+python run_tests.py integration
 
 # Run specific test files
-pytest tests/test_embeddings.py
+python run_tests.py tests/test_embeddings.py
 ```
 
 ## Documentation
