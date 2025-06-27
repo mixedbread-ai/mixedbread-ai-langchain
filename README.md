@@ -32,7 +32,7 @@ export MXBAI_API_KEY="your-api-key"
 from mixedbread_ai_langchain import MixedbreadEmbeddings
 
 embeddings = MixedbreadEmbeddings(model="mixedbread-ai/mxbai-embed-large-v1")
-result = embeddings.embed_query("What is the capital of France?")
+result = embeddings.embed_query("Who is German and likes bread?")
 ```
 
 ## Async Support
@@ -54,10 +54,10 @@ embedding = asyncio.run(embed_text())
 
 See the [`examples/`](./examples/) directory for complete usage examples:
 
-- **[Embeddings](./examples/embeddings_example.py)** - Text and document embedding
-- **[Reranker](./examples/reranker_example.py)** - Document reranking
-- **[Document Loader](./examples/document_loader_example.py)** - File parsing and loading
-- **[Vector Retriever](./examples/retriever_example.py)** - Vector-based search
+- **[Embeddings](https://github.com/mixedbread-ai/mixedbread-ai-langchain/blob/main/examples/embeddings_example.py)** - Text and document embedding
+- **[Reranker](https://github.com/mixedbread-ai/mixedbread-ai-langchain/blob/main/examples/reranker_example.py)** - Document reranking
+- **[Document Loader](https://github.com/mixedbread-ai/mixedbread-ai-langchain/blob/main/examples/document_loader_example.py)** - File parsing and loading
+- **[Vector Retriever](https://github.com/mixedbread-ai/mixedbread-ai-langchain/blob/main/examples/retriever_example.py)** - Vector-based search
 
 ## Testing
 
