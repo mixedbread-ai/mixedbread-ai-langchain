@@ -115,6 +115,7 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           password: ${{ secrets.PYPI_TEST_TOKEN }}
+          attestations: false
           verbose: true
 
   publish-production:
