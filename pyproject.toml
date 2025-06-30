@@ -29,7 +29,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/mixedbread-ai/mixedbread-ai-langchain"
-Documentation = "https://github.com/mixedbread-ai/mixedbread-ai-langchain#readme"
+Documentation = "https://www.mixedbread.com/api-reference/integrations/langchain"
 Issues = "https://github.com/mixedbread-ai/mixedbread-ai-langchain/issues"
 Source = "https://github.com/mixedbread-ai/mixedbread-ai-langchain"
 
